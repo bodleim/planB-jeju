@@ -7,6 +7,7 @@
  *
  * F3 필터는 `risks` 만 보면 된다. 원본 시계열이 필요하면 `hourly`.
  */
+import type { LatLng } from '../types.ts'
 
 const KMA = 'http://apis.data.go.kr/1360000'
 // ponytail: http 그대로. 일부 공공기관 https 인증서 체인이 깨져 있어 apis.py 도 검증을 껐다.
@@ -16,7 +17,7 @@ const KST_OFFSET_MS = 9 * 60 * 60 * 1000
 const JEJU_STN_ID = '184' // 기상특보 지점코드: 제주
 
 /** 성산항 근사 좌표 (시연 시나리오 출발지). 5km 격자 기준이라 이 정도 정밀도면 충분하다. */
-export const SEONGSAN_PORT = { lat: 33.4746, lon: 126.9317 }
+export const SEONGSAN_PORT: LatLng = { lat: 33.4746, lng: 126.9317 }
 
 /** ponytail: 임계값은 다 튜닝 노브다. 실제 제주 데이터 보고 조정할 것. */
 export const THRESHOLDS = {
@@ -287,10 +288,10 @@ export function fetchWarnings(stnId = JEJU_STN_ID): Promise<unknown> {
  * 화면의 '기상 임시 선택' 과 '확인 필요' 표시로 넘긴다 (CLAUDE.md 규칙).
  */
 export async function getWeather(
-  at: { lat: number; lon: number } = SEONGSAN_PORT,
+  at: LatLng = SEONGSAN_PORT,
   hours = 12,
 ): Promise<Weather> {
-  const grid = latLonToGrid(at.lat, at.lon)
+  const grid = latLonToGrid(at.lat, at.lng)
   const now = new Date()
   try {
     const [fcst, warn] = await Promise.all([

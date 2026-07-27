@@ -21,44 +21,81 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### 구현 현황
 
 **2026-07-27 기준.** 이 표는 실제 파일 상태입니다 — 없는 걸 완료로 적지 마세요.
-직전 버전이 F1·F2를 완료로 적어 뒀지만 코드가 없었고, 그걸 믿고 작업하면 시간을 버립니다.
 
 | | 상태 | 검증 |
 |---|---|---|
 | 기상 데이터 | **완료** `src/lib/data/weather.ts` — 단기예보+특보 실시간, 실패 시 `isFallback` 폴백 | `npm run check:weather` |
-| 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 보류 | (필터 체크에 포함) |
+| 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 `congestion` 인자로 대기 | (필터 체크에 포함) |
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 4개 제약 + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
-| 후보 장소 | ⚠️ **임시 데이터** `src/lib/data/places-seongsan.ts` — 성산권 14곳, 전부 `verified: false` | — |
-| F1 계획 생성 | ❌ **미구현.** `src/lib/plan/` 없음 | — |
-| F2 대안 교체 | ❌ **미구현.** 화면이 없습니다 (`src/app/page.tsx` 는 Hello world) | — |
-| 시연 화면 | ❌ **미구현.** `/`, `/dev/filter`, `/dev/plan` 전부 없음 | — |
+| F1 계획 생성 | **완료** `src/lib/plan/` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:filter` |
+| 후보 장소 | ⚠️ **임시 데이터** `src/lib/data/places-seongsan.ts` — 성산권 20곳, 전부 `verified: false` | — |
+| F2 대안 교체 | ❌ **미구현.** 재고(`PlanSlot.alternatives`)는 있고 화면·교체 로직이 없습니다 | — |
+| 시연 화면 | ❌ **미구현.** `/`는 Hello world, `/dev/filter`·`/dev/plan` 없음 | — |
 
 지금 눈으로 확인할 수 있는 건 `npm run check:filter` 콘솔 출력뿐입니다. 발표 시나리오
-(성산항 결항 / 5시간 / 차량)를 그대로 돌려 후보 8곳·제외 6곳과 제외 이유를 출력합니다.
+(성산항 결항 / 5시간 / 차량)를 F3 → F1 으로 이어 돌려 후보 11곳·제외 9곳과 제외 이유,
+그리고 거기서 만든 3개 시간대 계획을 출력합니다.
 
-**남은 일** — F1 계획 생성 → F2 화면·스와이프 → 실데이터 교체 → 시연 준비.
+**남은 일** — F2 화면·스와이프 → 실데이터 교체 → 시연 준비.
+
+### F3 → F1 파이프라인 (이 두 개가 어떻게 붙어 있는지)
+
+```
+src/lib/types.ts                 Place, TripCategory, Cause, 영업시간·노출도 타입
+src/lib/filter/index.ts          F3. findCandidates() → { candidates: Place[], rejected, risks }
+src/lib/plan/generate.ts         F1. generatePlan(input, candidates, policy), tryVisit
+src/lib/plan/score.ts            점수식과 카테고리 적합도 계산
+src/lib/plan/types.ts            PlanInput, Plan, PlanSlot, PlanPolicy, 탈락 이유
+src/lib/data/places-seongsan.ts  성산권 임시 후보 20곳 + ORIGINS (전부 verified: false)
+src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제주 시각, 시드 난수
+```
+
+- **F3가 `Place[]`를 걸러 `Place[]`를 주고, F1이 그걸 인자로 받습니다.** 화면은
+  `findCandidates()` → `generatePlan()` 두 번 호출하면 됩니다.
+- **영업시간 판정은 `tryVisit` 한 곳입니다.** F3는 자기 판정을 만들지 않고 `tryVisit`을
+  호출합니다. 단 F3에서는 `maxWaitMinutes`를 남은 시간 전체로 늘려 넘깁니다 — `tryVisit`은
+  '지금 출발해 바로 간다'는 한 칸 판정이라 그대로 쓰면 11시에 여는 곳이 10시 기준으로
+  잘려나가고, F1이 두 번째 시간대에 쓸 수 있었던 후보가 사라집니다. **F3는 필요조건만
+  봅니다** — F1이 쓸 수 있는 후보를 F3가 먼저 버리면 안 됩니다.
+- **기상 판정은 `exposure` 하나로 끝납니다.** `EXPOSURE_RISKS`(filter/index.ts)가
+  `Place.exposure`를 `WeatherRisk[]`로 옮깁니다. 장소마다 위험 목록을 손으로 적지 않습니다.
+- **`PlanInput.blockedTransport`는 이제 F3가 담당합니다.** F1 단독 사용을 위해 남겨 뒀지만,
+  `findCandidates()`를 거치면 이미 걸러져 있습니다.
+- **`PlanPolicy` 하나가 F1·F3 공용입니다.** `maxTravelShare`가 F3 전용 노브입니다.
+  임시 데이터를 쓰는 동안은 `PLACEHOLDER_POLICY`(=`findCandidates()` 기본값), 실데이터로
+  바꾸면 `DEFAULT_POLICY`.
 
 ### 만들 때 지킬 것 (아직 코드가 없는 부분의 설계 결정)
 
 - `/` 시연 화면은 **서버 렌더링 + GET 폼**으로 만드세요. 클라이언트 JS에 의존하지 않으면
   무대에서 네트워크가 흔들려도 화면은 뜹니다.
-- 시연 URL을 쿼리로 고정할 수 있게 만들고 리허설에는 그걸 북마크하세요. 예:
-  `/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00`
+- 시연 URL을 쿼리로 고정할 수 있게 만들고 리허설에는 그걸 북마크하세요. 목표하는 형태:
+  `/?go=1&cause=ferry_cancelled&lat=33.474&lng=126.932&remaining=300&companion=couple&activity=indoor&car=yes&checkin=16:00&at=10:00`
   `at`을 받아야 합니다 — 비우면 실제 현재 시각이라 새벽에 열면 후보 0곳이 됩니다.
+  위치는 브라우저 감지가 기본이고, 거부되거나 제주 밖이면 `ORIGINS`로 폴백합니다
+  (`parseJejuCoord`).
 - `/dev/filter`, `/dev/plan` — 확인용 개발 페이지. 시연 화면이 아닙니다.
+- **F2 재고는 이미 있습니다.** 각 `PlanSlot`에 채택안(`chosen`)과 같은 조건에서 검증된
+  대안(`alternatives`)이 들어 있습니다. 새로고침은 `PlanInput.seed`만 바꾸면 됩니다.
+  단 대안으로 교체하면 뒤 시간대의 출발 시각이 밀리므로 그 뒤를 다시 채워야 합니다 —
+  이 재계산 함수는 아직 없습니다.
 - **F1·F2가 지킬 불변식** — 이걸 깨는 변경은 되돌리세요.
-  - 모든 방문지는 도착 시각에 실제로 열려 있다 (`tryVisit`이 보장. F3의
-    `visitWindow()` 위에 올릴 것 — 별도 판정을 만들면 이 불변식이 깨집니다)
+  - 모든 방문지는 **도착 시각에** 실제로 열려 있다 (`tryVisit`이 보장. 별도 판정을
+    만들면 이 불변식이 깨집니다)
   - 스와이프·새로고침으로 바뀐 결과도 같은 제약을 통과한다
-  - 제시되는 대안들은 서로 다른 장소 조합 (`setKey`로 판정)
+  - 제시되는 대안들은 서로 다른 장소 조합
+  - 대안이 2개 미만인 시간대는 편성하지 않는다 (`PlanPolicy.minAlternativesPerSlot`).
+    남은 시간을 채우는 것보다 모든 시간대에서 스와이프가 되는 것이 우선입니다
 
 ### API 키가 나오면 갈아끼울 곳 (딱 세 군데)
 
-1. `src/lib/data/places-seongsan.ts` — **임시 데이터**. 운영시간은 확인된 사실이 아니라
-   자리표시자이고 전부 `verified: false`입니다. **한국관광공사 TourAPI** 응답으로 교체하고
-   `PLACEHOLDER_POLICY` 대신 `DEFAULT_POLICY`를 쓰세요.
+1. `src/lib/data/places-seongsan.ts` — **임시 데이터**. 운영시간·요금·좌표는 확인된 사실이
+   아니라 자리표시자이고 전부 `verified: false`입니다. **한국관광공사 TourAPI** 응답으로
+   교체하고 `PLACEHOLDER_POLICY` 대신 `DEFAULT_POLICY`를 쓰세요. 그러면 미확인 장소는
+   자동으로 편성에서 빠집니다 (지금 `DEFAULT_POLICY`로 돌리면 후보 0곳이 나옵니다 — 정상).
    비짓제주는 승인이 수일 걸려 못 받았고, 관광공사로 대체했습니다 (아래 '데이터 전략' 참고).
    `scripts/apis.py` 에 `KorService2` 호출 함수는 **아직 없습니다** — 추가해야 합니다.
+   교체 시 **`exposure`부터 확인하세요** — 이 값이 틀리면 기상 필터가 그대로 틀립니다.
 2. ~~`src/lib/data/weather.ts`~~ — **완료.** 기상청 단기예보+특보 실시간 호출이 들어갔습니다.
    `DATA_GO_KR_KEY`만 `.env.local`에 넣으면 됩니다. `getWeather()`는 throw하지 않고
    실패 시 `isFallback: true`로 돌려줍니다. 실키로 한 번 확인한 뒤에 화면의
@@ -77,18 +114,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `reduction`, `lowCarbon` 플랜은 코드에서 제거했습니다. 다시 추가하지 마세요.
 거리는 탄소 지표가 아니라 **남은 시간 안에 갈 수 있는지**를 판단하는 값입니다.
 
-### F1. Core — 시간·카테고리 기반 여행 계획 생성
+### F1. Core — 위치·시간·카테고리 기반 여행 계획 생성
 
-**남은 시간**과 **추천 카테고리**(여행 성격)를 입력받아, 시간대별 방문지가 채워진
+**현재 위치**, **남은 시간**, **추천 카테고리**를 입력받아, 시간대별 방문지가 채워진
 여행 계획을 만든다.
 
 | 입력 | 설명 |
 |---|---|
+| 위치 | 브라우저 위치 감지. 거부되거나 제주 밖이면 `ORIGINS`의 지점으로 폴백 (`parseJejuCoord`) |
 | 시간 | 시작 시각과 남은 시간 (또는 종료 시각) |
-| 추천 카테고리 | 여행 성격. 생성된 일정 전체가 이 성격을 따른다 |
+| 추천 카테고리 | **두 축**. 동반 유형(가족·커플·혼자) 하나 + 활동 성격(실내 위주·먹거리·액티비티) 하나 |
 
-카테고리는 계획의 톤을 정하는 값이지 단순 필터가 아닙니다. 한 일정 안의 방문지들이
+카테고리는 계획의 성격을 정하는 값이지 단순 필터가 아닙니다. 한 일정 안의 방문지들이
 서로 다른 성격으로 섞이면 안 됩니다.
+
+장소마다 두 축의 적합도(`companionFit`, `activityFit`)를 0~1로 두고, **양쪽이 모두 0보다
+커야** 후보가 됩니다. 점수는 두 값의 기하평균이라 한 축만 뛰어난 곳이 양쪽 고른 곳보다
+아래로 갑니다 — '가족 + 먹거리'는 가족에게 맞으면서 먹거리이기도 해야 합니다.
+
+위치가 성산권에서 멀면 조용히 빈 결과를 주지 않고 `diagnostics.nearestCandidateKm`에
+거리를 남깁니다. 스냅샷 범위가 성산권뿐이라 생기는 한계를 화면이 설명할 수 있어야 합니다.
 
 **완료 기준**: 시간과 카테고리만 넣으면 30초 이내에 계획이 뜨고, 모든 방문지가 도착
 시각에 실제로 열려 있으며, 남은 시간 안에 완주 가능하다.
@@ -114,7 +159,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### F3. Supporting — 기상·결항·영업·거리 기반 최적 탐색 (API)
 
-후보 장소를 4가지 하드 제약으로 걸러 최적 조합을 찾는다. **F1보다 먼저 만들어야 합니다** —
+후보 장소를 4가지 하드 제약으로 걸러 최적 조합을 찾는다. F1보다 **앞에** 돕니다 —
 필터를 통과한 후보 집합이 있어야 계획을 만들 수 있습니다.
 
 | 검사 | 기준 | 실패 시 |
@@ -143,11 +188,14 @@ API로 확인합니다. API가 실패하면 계획 생성이 멈추는 게 아�
 - **`CAUSE_RISKS`가 핵심입니다.** 기상 API가 폴백이어도 사용자가 고른 중단 원인만으로
   위험이 확정됩니다 (`ferry_cancelled` → `sea`+`wind`). 키 없이도 "강풍으로 배가 끊겼는데
   다른 해상 일정을 추천하지 않는다"가 성립합니다.
-- `visitWindow(hours, arriveAt)`이 '도착 시각에 열려 있나'의 유일한 판정입니다.
-  F1의 `tryVisit`은 이 함수 위에 올리세요 — 두 기능이 다른 판정을 쓰면 불변식이 깨집니다.
-- 시각 판단은 전부 KST로 환산합니다 (Vercel은 UTC).
-- `hazards`가 빈 실내 장소는 기상 검사를 통과합니다. 임시 데이터의 `indoor` 값이
-  실제와 다르면 필터가 틀립니다 — 실데이터 교체 시 이 필드부터 확인하세요.
+- 영업 여부는 F1의 `tryVisit`에 넘깁니다 — '도착 시각에 열려 있나'의 판정은 그 함수
+  하나뿐입니다. 두 기능이 다른 판정을 쓰면 불변식이 깨집니다. 단 F3는 `maxWaitMinutes`를
+  남은 시간 전체로 늘려 넘깁니다 (위 '파이프라인' 항목의 이유).
+- 기상 검사는 `EXPOSURE_RISKS[place.exposure]`와 활성 위험의 교집합입니다. `indoor`는
+  위험 목록이 비어 있어 항상 통과합니다. 임시 데이터의 `exposure` 값이 실제와 다르면
+  필터가 그대로 틀립니다 — 실데이터 교체 시 이 필드부터 확인하세요.
+- 시각은 자정 기준 분(`MinuteOfDay`)으로 다루고, 현재 시각은 `jejuClock()`으로만 얻습니다
+  (Vercel은 UTC라 `new Date().getHours()`를 쓰면 9시간 어긋납니다).
 
 ### 하지 않을 것 (Stretch — 시간이 남으면)
 
@@ -169,7 +217,7 @@ npm run lint    # ESLint
 cp .env.example .env.local   # 키 채우기 (런타임에 필수인 건 DATA_GO_KR_KEY 하나)
 npm run check:weather        # 기상청 발표시각·파싱·위험판정 assert (키 불필요)
 npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
-npm run check:filter         # F3 4개 제약 + 발표 시나리오 재현 assert (키 불필요)
+npm run check:filter         # F3 4개 제약 + F1 계획 생성 + 발표 시나리오 재현 assert (키 불필요)
 npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
 npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/*.json (아직 미수집)
 ```
@@ -177,7 +225,10 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 - 소스는 `src/` 아래, import alias는 `@/*`
 - 테스트 러너는 설치하지 않았습니다. 1박2일 안에서는 `npm run build`의 타입체크가 사실상
   유일한 자동 검증입니다. 화면을 띄워 직접 확인하세요.
-- 원격은 `github.com/bodleim/planB-jeju`, 기본 브랜치 `main`.
+- 원격은 `github.com/bodleim/planB-jeju`, 기본 브랜치 `main`. 각자 브랜치에서 작업하고
+  PR로 합칩니다.
+- F1 불변식 검증은 `check:filter` 안으로 들어왔습니다 (F3 → F1 이어 돌리고, 모든 방문지가
+  도착 시각에 열려 있는지·seed마다 조합이 달라지는지를 `generate.ts`와 독립적으로 다시 확인).
 
 ### ⚠️ Next.js 16은 학습 데이터보다 최신입니다
 
@@ -230,8 +281,13 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 4. 각 시간대의 이동시간·비용·체류시간을 계산해 채택안을 정한다.
 5. 출처·기준시각·확인 필요 항목을 결과 화면에 표시한다.
 
-예시 점수식 (기획서 기준, 튜닝 가능):
-`실행가능성 30% + 남은시간 효율 25% + 카테고리 적합도 20% + 비용 10% + 이동거리 10% + 다양성 5%`
+현재 점수식 (`src/lib/plan/score.ts`의 `SCORE_WEIGHTS`, 합이 1):
+`실행가능성 25% + 남은시간 효율 25% + 카테고리 적합도 30% + 비용 5% + 이동거리 10% + 다양성 5%`
+
+기획서의 카테고리 적합도 20%에서 30%로 올렸습니다. 20%에서는 실행가능성·시간효율이 지배해서
+가족·커플·혼자를 바꿔도 액티비티 일정이 같은 결과로 수렴했습니다. 늘린 10%p는 실행가능성과
+비용에서 5%p씩 뺐습니다 — 남은시간 효율에서 빼면 계획이 꼬리까지 채워져 마지막 시간대의
+대안이 말라버립니다(효율이 짧은 꼬리 시간대를 억제하는 역할을 합니다).
 
 **제약 위반 0이 점수보다 우선합니다.** 추천 품질이 애매한 건 괜찮지만, 문 닫은 곳이나
 남은 시간 안에 못 가는 곳이 결과에 뜨면 시연이 무너집니다.

@@ -28,7 +28,7 @@ assert.deepEqual(kmaBaseTime(kst('2026-01-01T00:10')), { baseDate: '20251231', b
 
 // 격자 변환 — 기상청 dfs_xy_conv 표준 검증값
 assert.deepEqual(latLonToGrid(37.5665, 126.978), { nx: 60, ny: 127 }, '서울시청')
-const seongsan = latLonToGrid(SEONGSAN_PORT.lat, SEONGSAN_PORT.lon)
+const seongsan = latLonToGrid(SEONGSAN_PORT.lat, SEONGSAN_PORT.lng)
 assert.ok(seongsan.nx > 52 && seongsan.ny < 40, `성산은 제주시(52,38) 동쪽/남쪽: ${JSON.stringify(seongsan)}`)
 
 // 응답 파싱
