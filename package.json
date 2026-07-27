@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "check:weather": "node --experimental-strip-types --no-warnings=MODULE_TYPELESS_PACKAGE_JSON src/lib/data/weather.check.ts",
+    "check:filter": "node --experimental-strip-types --no-warnings=MODULE_TYPELESS_PACKAGE_JSON src/lib/filter/filter.check.ts",
     "check:api": "python3 scripts/apis.py",
     "snapshot": "python3 scripts/snapshot.py"
   },

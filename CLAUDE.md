@@ -22,7 +22,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | | 상태 |
 |---|---|
-| F3 후보 필터 | 로직 완료 (`src/lib/filter/`) — 임시 데이터로 동작 확인. 결항 입력은 사용자 입력으로 처리 |
+| F3 후보 필터 | 로직 완료 (`src/lib/filter/`) — 임시 데이터로 동작 확인 (`npm run check:filter`). 진입점은 `findCandidates()`. 결항은 사용자 입력 |
 | F1 계획 생성 | 로직 완료 (`src/lib/plan/`) — 생성 2ms, 목표 30초 대비 여유. **카테고리 입력은 미구현** |
 | F2 대안 교체 | 화면만 완료 (`/` + `src/app/_components/`) — 선택 → 길찾기까지 연결. **스와이프·새로고침 재생성 미구현** |
 
@@ -120,6 +120,21 @@ API로 확인합니다. API가 실패하면 계획 생성이 멈추는 게 아�
 
 **완료 기준**: 4가지 기준을 통과한 후보만 남고, 핵심 필드 유효율 95%를 확인.
 
+**구현 메모** (`src/lib/filter/index.ts`)
+- 진입점은 `findCandidates()` — 기상 호출 + 장소 + 필터를 묶는다. 순수 함수만 쓰려면
+  `filterCandidates(places, ctx)`.
+- 제외된 후보를 버리지 않고 `rejected: {place, reason, detail}[]` 로 돌려줍니다.
+  '왜 빠졌는지'가 이 서비스의 차별점이고 심사 답변의 근거입니다. `detail`은 고정
+  템플릿이라 LLM이 만들지 않습니다.
+- **`CAUSE_RISKS`가 핵심입니다.** 기상 API가 폴백이어도 사용자가 고른 중단 원인만으로
+  위험이 확정됩니다 (`ferry_cancelled` → `sea`+`wind`). 키 없이도 "강풍으로 배가 끊겼는데
+  다른 해상 일정을 추천하지 않는다"가 성립합니다.
+- `visitWindow(hours, arriveAt)`이 '도착 시각에 열려 있나'의 유일한 판정입니다.
+  F1의 `tryVisit`은 이 함수 위에 올리세요 — 두 기능이 다른 판정을 쓰면 불변식이 깨집니다.
+- 시각 판단은 전부 KST로 환산합니다 (Vercel은 UTC).
+- `hazards`가 빈 실내 장소는 기상 검사를 통과합니다. 임시 데이터의 `indoor` 값이
+  실제와 다르면 필터가 틀립니다 — 실데이터 교체 시 이 필드부터 확인하세요.
+
 ### 하지 않을 것 (Stretch — 시간이 남으면)
 
 GPS 실제 주행거리 검증 / 개인 선호 학습 / 영어·중국어·일본어 / 자동 결항 감지 /
@@ -140,6 +155,7 @@ npm run lint    # ESLint
 cp .env.example .env.local   # 키 채우기 (런타임에 필수인 건 DATA_GO_KR_KEY 하나)
 npm run check:weather        # 기상청 발표시각·파싱·위험판정 assert (키 불필요)
 npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
+npm run check:filter         # F3 4개 제약 + 발표 시나리오 재현 assert (키 불필요)
 npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
 npm run snapshot             # 비짓제주·교통 → src/lib/data/snapshots/*.json
 ```
