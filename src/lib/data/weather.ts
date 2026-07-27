@@ -51,8 +51,14 @@ export type Weather = {
   isFallback: boolean
   grid: { nx: number; ny: number }
   hourly: HourlyWeather[]
-  /** 기상특보 제목 목록 */
+  /** 기상특보 제목 목록. 특보 API 가 실패하면 빈 배열이고 `warningsOk` 가 false 다. */
   warnings: string[]
+  /**
+   * 특보 조회가 실제로 성공했는지. **화면이 출처를 정직하게 적으려면 이 값이 필요하다** —
+   * 특보 API 가 403 인데 '단기예보·특보 실시간' 이라고 쓰면 근거를 물었을 때 답이 없다.
+   * false 면 위험 판정은 단기예보 수치와 중단 원인만으로 한 것이다.
+   */
+  warningsOk: boolean
   risks: WeatherRisk[]
 }
 
@@ -303,11 +309,12 @@ export async function getWeather(
     const warnings = warn ? parseWarnings(warn) : []
     return {
       at: now.toISOString(),
-      source: '기상청 단기예보',
+      source: warn ? '기상청 단기예보 + 기상특보' : '기상청 단기예보',
       isFallback: false,
       grid,
       hourly,
       warnings,
+      warningsOk: warn !== null,
       risks: deriveRisks(hourly, warnings),
     }
   } catch {
@@ -319,6 +326,7 @@ export async function getWeather(
       grid,
       hourly: [],
       warnings: [],
+      warningsOk: false,
       risks: [],
     }
   }

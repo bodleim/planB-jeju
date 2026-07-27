@@ -10,7 +10,7 @@
  * 여기서 추가로 보는 건 F1 이 모르는 두 가지 — 기상 위험과 끊긴 교통편이다.
  */
 import { getWeather, type Weather, type WeatherRisk } from '../data/weather.ts'
-import { FERRY_BOUNDS, SEONGSAN_PLACES } from '../data/places.ts'
+import { SEONGSAN_PLACES, needsBoatFrom } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { DEFAULT_POLICY, tryVisit, type VisitContext } from '../plan/generate.ts'
 import type { PlanPolicy, RejectReason as PlanRejectReason } from '../plan/types.ts'
@@ -92,14 +92,15 @@ export type FilterResult = {
   risks: WeatherRisk[]
   /** 기상 정보가 폴백이었는지 — 화면에 '확인 필요' 를 띄우는 근거 */
   weatherFallback: boolean
-}
-
-/** 좌표가 사각 범위 안인지. 여객선으로만 가는 권역(우도) 판정에 쓴다. */
-function inBounds(
-  at: LatLng,
-  b: { minLat: number; maxLat: number; minLng: number; maxLng: number },
-): boolean {
-  return at.lat >= b.minLat && at.lat <= b.maxLat && at.lng >= b.minLng && at.lng <= b.maxLng
+  /**
+   * 위험 판정에 **실제로** 쓴 기상 출처. 화면이 이걸 그대로 적는다 —
+   * 특보 API 가 막혀 있는데 '특보 실시간' 이라고 쓰면 근거를 물었을 때 답이 없다.
+   */
+  weatherSource: string
+  /** 기상특보 조회가 성공했는지. false 면 특보는 판정에 안 들어갔다. */
+  warningsOk: boolean
+  /** 조회된 특보 제목. 화면에 근거로 그대로 보여준다. */
+  warnings: string[]
 }
 
 /** 기상 API 의 위험 + 중단 원인이 함의하는 위험. */
@@ -137,8 +138,6 @@ export function filterCandidates(places: readonly Place[], ctx: FilterContext): 
   const reject = (place: Place, reason: RejectReason, detail: string) =>
     rejected.push({ place, reason, detail })
 
-  const onIsland = FERRY_BOUNDS !== null && inBounds(origin, FERRY_BOUNDS)
-
   for (const place of places) {
     // 1. 결항 — 끊긴 교통편에 의존하는 후보
     if (blocked && place.dependsOn === blocked) {
@@ -146,13 +145,12 @@ export function filterCandidates(places: readonly Place[], ctx: FilterContext): 
       continue
     }
 
-    // 1-2. 결항이 아니어도, 배·비행기를 타야 하는 곳은 지금 그 섬에 있지 않으면 제외한다.
+    // 1-2. 결항이 아니어도, 배·비행기를 타야 하는 곳은 제외한다 (같은 섬 안이면 통과).
     //
-    // `estimateTravelMinutes` 는 육로 거리 기반이라 배편 시간표·대기시간을 모른다. 그대로
-    // 두면 성산항에서 우도 후보까지 '차로 10분' 으로 계산해서 실행 불가능한 일정이 나온다.
-    // 앱이 없는 정보를 있는 척하지 않는다 (CLAUDE.md: 앱이 안전판단을 대신하지 않는다).
-    if (place.dependsOn !== undefined && !(place.dependsOn === 'ferry' && onIsland)) {
-      const vehicle = place.dependsOn === 'ferry' ? '배' : '항공편'
+    // 판정은 `needsBoatFrom` 한 곳에서 한다 — 부속섬이 우도·추자도·마라도·가파도·비양도
+    // 다섯 곳이라 '섬 안인가' 를 F3 가 직접 계산하면 섬이 늘 때마다 여기가 틀린다.
+    if (place.dependsOn === 'flight' || needsBoatFrom(place, origin)) {
+      const vehicle = place.dependsOn === 'flight' ? '항공편' : '배'
       reject(place, 'needsTransfer', `${vehicle}를 타야 하는 곳 — 배편 시간을 반영할 수 없어 제외`)
       continue
     }
@@ -183,7 +181,15 @@ export function filterCandidates(places: readonly Place[], ctx: FilterContext): 
     candidates.push(place)
   }
 
-  return { candidates, rejected, risks, weatherFallback: weather.isFallback }
+  return {
+    candidates,
+    rejected,
+    risks,
+    weatherFallback: weather.isFallback,
+    weatherSource: weather.source,
+    warningsOk: weather.warningsOk,
+    warnings: weather.warnings,
+  }
 }
 
 /**

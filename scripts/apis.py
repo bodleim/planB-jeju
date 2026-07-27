@@ -94,6 +94,21 @@ def tour_nearby(lat=33.4744, lon=126.9319, radius=15000, content_type=None, rows
                  contentTypeId=content_type, arrange="E", numOfRows=rows, pageNo=page)
 
 
+def tour_area(content_type=None, area=39, rows=100, page=1):
+    """지역 전체 관광 후보 (areaBasedList2). area=39 는 제주도.
+
+    `tour_nearby` 는 반경 기준이라 특정 지점 주변만 나온다. 서비스는 제주 어디서든
+    동작해야 하므로 후보 수집은 이쪽을 쓴다. 유형별 총건수는 body.totalCount 에 있다.
+    """
+    return _tour("areaBasedList2", areaCode=area, contentTypeId=content_type,
+                 arrange="A", numOfRows=rows, pageNo=page)
+
+
+def tour_total(response):
+    """응답의 전체 건수. 페이지네이션 종료 조건에 쓴다."""
+    return response.get("response", {}).get("body", {}).get("totalCount", 0)
+
+
 def tour_intro(content_id, content_type):
     """운영시간·휴무일 (detailIntro2). 필드명이 contentTypeId 별로 다르다 —
     12 usetime/restdate, 39 opentimefood/restdatefood, 14 usetimeculture/restdateculture,

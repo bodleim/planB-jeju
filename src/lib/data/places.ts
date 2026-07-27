@@ -2,9 +2,12 @@
  * 후보 장소 — **한국관광공사 TourAPI(KorService2) 실데이터.**
  *
  * `npm run snapshot` 이 받아 둔 `snapshots/tour-seongsan.json`(성산항 반경 15km)을
- * `Place[]` 로 옮긴다. 앱은 이 JSON 만 읽는다 — 시연 중 관광공사 API 가 죽어도
- * 후보 목록은 나온다. 수집 시각은 `PLACES_SNAPSHOT.fetchedAt` 이고 화면의
- * '데이터 기준시각' 에 그대로 쓴다.
+ * `Place[]` 로 옮긴다. 앱은 이 JSON 만 읽는다 — 관광공사 API 가 죽어도 후보 목록은 나온다.
+ * 수집 시각은 `PLACES_SNAPSHOT.fetchedAt` 이고 화면의 '데이터 기준시각' 에 그대로 쓴다.
+ *
+ * **범위는 성산·우도권이다** (MVP 스코프). 제주 전역으로 넓히려면 `scripts/snapshot.py` 의
+ * `tour-jeju` 를 돌리면 되고, 이 파일의 import 한 줄만 바꾸면 된다. 넓힐 때 드는 비용은
+ * 상세 호출이 장소당 1회라는 것뿐이다 (전역 약 1,016곳 = 개발계정 이틀).
  *
  * **사실과 추정을 구분한다.**
  * - 사실(관광공사 응답): 이름·좌표·전화·영업시간·휴무일. 영업시간이 확신 있게
@@ -22,18 +25,7 @@ import type {
   Exposure,
   LatLng,
   Place,
-  Weekday,
 } from '../types.ts'
-
-/**
- * 시작 지점 후보. 기본은 브라우저 위치 감지이고, 이 목록은 위치 권한이 거부됐을 때의
- * 폴백과 리허설 URL용이다. 키는 쿼리의 origin 값과 맞춘다.
- */
-export const ORIGINS: Readonly<Record<string, { readonly label: string; readonly coord: LatLng }>> = {
-  seongsan_port: { label: '성산항', coord: { lat: 33.4744, lng: 126.9319 } },
-  seongsan_ilchulbong: { label: '성산일출봉 주차장', coord: { lat: 33.4587, lng: 126.9425 } },
-  pyoseon: { label: '표선', coord: { lat: 33.3247, lng: 126.832 } },
-}
 
 // ------------------------------------------------------------------ 추정 표
 
@@ -138,7 +130,7 @@ function activityFitOf(contentType: string, cat3: string, exposure: Exposure): P
   const fit: Partial<Record<ActivityStyle, number>> = {}
   if (exposure === 'indoor') {
     // 카페·식당은 '실내 위주' 일정의 주역이 아니라 곁들이다. 박물관·전시관과 같은 1.0 을
-    // 주면 성산권처럼 음식점 비중이 큰 데이터에서 카페만 연달아 나오는 일정이 만들어진다.
+    // 주면 음식점 비중이 큰 관광공사 데이터에서 카페만 연달아 나오는 일정이 만들어진다.
     fit.indoor = contentType === '39' ? 0.55 : 1
   } else if (exposure === 'covered') fit.indoor = 0.6
 
@@ -187,19 +179,52 @@ export function parseFeeWon(raw: string): number | null {
 }
 
 /**
- * 우도 부속섬 여부. 여기 있는 곳은 배가 끊기면 갈 수 없다 (`dependsOn: 'ferry'`).
- * 주소가 비거나 틀린 항목이 있어 제목도 함께 본다.
+ * 배로만 갈 수 있는 부속섬. **좌표 상자로 판정한다.**
+ *
+ * 주소나 제목으로 하면 '마라도 가파도 정기여객선'(대정읍 최남단해안로 = 육지 항구)까지
+ * 섬으로 잡힌다. 좌표는 관광공사가 주는 사실이고 흔들리지 않는다.
+ * 상자는 섬 전체를 감싸되 육지에 닿지 않는 크기다 — `places.check.ts` 가 육지 항구·해변이
+ * 여기 들어오지 않는지 확인한다.
  */
-function needsFerry(item: RawItem): boolean {
-  const addr = item.addr1 ?? ''
-  if (/우도면|우도해안길|우도봉길/.test(addr)) return true
-  return /^우도|우도\s|\s우도/.test(item.title) && !/일출봉/.test(item.title)
+const FERRY_ISLANDS: readonly {
+  readonly name: string
+  readonly minLat: number
+  readonly maxLat: number
+  readonly minLng: number
+  readonly maxLng: number
+}[] = [
+  { name: '우도', minLat: 33.485, maxLat: 33.535, minLng: 126.935, maxLng: 126.975 },
+  { name: '추자도', minLat: 33.93, maxLat: 33.985, minLng: 126.265, maxLng: 126.34 },
+  { name: '마라도', minLat: 33.108, maxLat: 33.125, minLng: 126.26, maxLng: 126.278 },
+  { name: '가파도', minLat: 33.16, maxLat: 33.185, minLng: 126.258, maxLng: 126.285 },
+  { name: '비양도', minLat: 33.4, maxLat: 33.418, minLng: 126.215, maxLng: 126.238 },
+]
+
+/** 이 좌표가 어느 부속섬인지. 육지면 null. */
+export function islandOf(at: LatLng): string | null {
+  const found = FERRY_ISLANDS.find(
+    (i) => at.lat >= i.minLat && at.lat <= i.maxLat && at.lng >= i.minLng && at.lng <= i.maxLng,
+  )
+  return found ? found.name : null
+}
+
+/**
+ * 이 후보에 가려면 `origin` 에서 배를 타야 하는가.
+ *
+ * F3 가 이 값으로 후보를 자른다. `estimateTravelMinutes` 는 육로 거리 기반이라 배편
+ * 시간표·대기시간을 모른다 — 성산항에서 우도 후보까지 '차로 10분' 으로 계산해 버린다.
+ * **같은 섬 안에 있으면 배를 안 타므로 허용한다** (우도에서 우도 후보를 짜는 건 정상이다).
+ */
+export function needsBoatFrom(place: Place, origin: LatLng): boolean {
+  const island = islandOf(place.coord)
+  if (island === null) return false
+  return islandOf(origin) !== island
 }
 
 /** 읍·면·리 단위 권역. 다양성 점수에서 같은 권역 반복을 눌러주는 데 쓴다. */
 function areaOf(item: RawItem): string {
   const m = /제주특별자치도\s+\S+\s+(\S+?(?:읍|면|동|리))/.exec(item.addr1 ?? '')
-  return m ? m[1] : '성산권'
+  return m ? m[1] : '제주'
 }
 
 // ------------------------------------------------------------------ 변환
@@ -252,7 +277,7 @@ export function loadPlaces(month = new Date(snapshot.fetchedAt).getMonth() + 1):
       area: areaOf(item),
       coord: { lat, lng },
       exposure,
-      ...(needsFerry(item) ? { dependsOn: 'ferry' as const } : {}),
+      ...(islandOf({ lat, lng }) !== null ? { dependsOn: 'ferry' as const } : {}),
       companionFit: COMPANION_BY_CAT3[cat3] ?? COMPANION_BY_TYPE[contentType] ?? { family: 0.6, couple: 0.6, solo: 0.6 },
       activityFit: activityFitOf(contentType, cat3, exposure),
       stayMinutes,
@@ -273,27 +298,32 @@ export function loadPlaces(month = new Date(snapshot.fetchedAt).getMonth() + 1):
 
 const loaded = loadPlaces()
 
-/** F3 가 거를 후보 집합. */
+/** F3 가 거를 후보 집합 — 성산·우도권. */
 export const SEONGSAN_PLACES: readonly Place[] = loaded.places
 
 /**
- * 여객선으로만 가는 후보들이 모여 있는 범위 (= 우도).
+ * 이름·권역으로 후보를 찾는다. **출발 위치 입력의 폴백**이다.
  *
- * F3 가 '지금 위치가 섬 안인가' 를 판단하는 데 쓴다. 섬 밖에서 섬 안 후보를 편성하면
- * `estimateTravelMinutes` 가 배편을 모른 채 육로 거리로 계산해서 말도 안 되는 일정이 된다.
- * 좌표에서 그때그때 계산하므로 스냅샷 범위가 바뀌면 따라 움직인다.
+ * 위치 감지가 거부되거나 JS 가 없을 때 사용자가 '성산항' 처럼 쳐서 시작점을 정할 수 있어야
+ * 한다. 카카오 지오코딩을 쓰지 않는 이유는 외부 호출이 하나 늘면 그만큼 화면이 죽을 확률이
+ * 늘기 때문이다 — 우리가 이미 가진 1,000여 곳 안에서 찾으면 오프라인에서도 된다.
+ *
+ * 공백으로 나눈 토큰이 **전부** 이름이나 권역에 들어 있어야 맞는 것으로 본다.
  */
-export const FERRY_BOUNDS = (() => {
-  const coords = loaded.places.filter((p) => p.dependsOn === 'ferry').map((p) => p.coord)
-  if (coords.length === 0) return null
-  const pad = 0.01 // 약 1km — 섬 경계의 항구·해안 후보가 밖으로 새지 않게
-  return {
-    minLat: Math.min(...coords.map((c) => c.lat)) - pad,
-    maxLat: Math.max(...coords.map((c) => c.lat)) + pad,
-    minLng: Math.min(...coords.map((c) => c.lng)) - pad,
-    maxLng: Math.max(...coords.map((c) => c.lng)) + pad,
+export function searchPlaces(query: string, limit = 8): Place[] {
+  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
+  if (tokens.length === 0) return []
+  const scored: { place: Place; score: number }[] = []
+  for (const place of loaded.places) {
+    const haystack = `${place.name} ${place.area}`.toLowerCase()
+    if (!tokens.every((t) => haystack.includes(t))) continue
+    // 이름이 검색어로 시작하면 위로. 짧은 이름이 대개 더 대표적인 지명이다.
+    const starts = place.name.toLowerCase().startsWith(tokens[0]) ? 0 : 1
+    scored.push({ place, score: starts * 1000 + place.name.length })
   }
-})()
+  scored.sort((a, b) => a.score - b.score)
+  return scored.slice(0, limit).map((s) => s.place)
+}
 
 export const PLACES_SNAPSHOT = {
   source: snapshot.source,

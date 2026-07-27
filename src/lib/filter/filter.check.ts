@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict'
 import type { Weather } from '../data/weather.ts'
-import { ORIGINS, SEONGSAN_PLACES } from '../data/places.ts'
+import { SEONGSAN_PLACES } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { alwaysOpen, weeklyHours } from '../hours.ts'
 import { DEFAULT_POLICY, PLACEHOLDER_POLICY } from '../plan/index.ts'
@@ -21,8 +21,9 @@ import {
   type FilterContext,
 } from './index.ts'
 
-const SEONGSAN_PORT = ORIGINS.seongsan_port.coord
-const ILCHULBONG = ORIGINS.seongsan_ilchulbong.coord
+// 좌표를 직접 쓴다 — 화면에 하드코딩된 출발지 목록은 없앴다 (검색·위치감지로 받는다).
+const SEONGSAN_PORT = { lat: 33.4744, lng: 126.9319 }
+const ILCHULBONG = { lat: 33.4587, lng: 126.9425 }
 const MONDAY = 1 as const
 
 const weather = (risks: Weather['risks'], isFallback = false): Weather => ({
@@ -32,6 +33,7 @@ const weather = (risks: Weather['risks'], isFallback = false): Weather => ({
   grid: { nx: 60, ny: 37 },
   hourly: [],
   warnings: [],
+  warningsOk: false,
   risks,
 })
 
@@ -95,17 +97,21 @@ const reasonOf = (p: Place, ctx: Partial<FilterContext> = {}) => only(p, ctx).re
 
 assert.equal(only(indoorNearby).candidates.length, 1, '실내·근거리·영업중 → 통과')
 
-// 결항: 끊긴 교통편에 의존하는 후보
-const ferryPlace: Place = { ...indoorNearby, id: 't-ferry', dependsOn: 'ferry' }
-assert.equal(reasonOf(ferryPlace), 'cancelled')
+// 결항: 끊긴 교통편에 의존하는 후보.
+// `dependsOn` 은 좌표에서 파생되므로(섬 안이면 ferry) 후보도 실제 섬 좌표를 써야 한다 —
+// 육지 좌표에 dependsOn 만 붙이면 모순된 데이터라 판정을 검증하지 못한다.
+const UDO = { lat: 33.505, lng: 126.952 }
+const ferryPlace: Place = { ...indoorNearby, id: 't-ferry', coord: UDO, dependsOn: 'ferry' }
+assert.equal(reasonOf(ferryPlace), 'cancelled', '여객선 결항이면 결항 이유로 먼저 걸린다')
 // 결항이 아니어도 배를 타야 하는 곳은 제외한다 — 이동시간 추정이 배편을 모른다.
-// 성산항 좌표에서 판정하므로 우도 권역 밖이다.
 assert.equal(reasonOf(ferryPlace, { cause: 'rain' }), 'needsTransfer', '비 때문이어도 배는 못 탄다')
 assert.equal(
-  only(ferryPlace, { cause: 'rain', origin: { lat: 33.505, lng: 126.952 } }).candidates.length,
+  only(ferryPlace, { cause: 'rain', origin: UDO }).candidates.length,
   1,
   '이미 우도 안에 있으면 우도 후보를 쓸 수 있다',
 )
+// 육지 후보는 섬 밖에서도 통과한다 (섬 판정이 과하게 잡히지 않는다)
+assert.equal(only(indoorNearby, { cause: 'rain' }).candidates.length, 1)
 
 // 기상: 같은 위험
 const coastal: Place = { ...indoorNearby, id: 't-sea', exposure: 'coastal' }

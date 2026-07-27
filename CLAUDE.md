@@ -31,7 +31,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
 | F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
 | F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
-| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | HTTP 로만 확인 — **브라우저 스와이프는 미확인** |
+| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | HTTP 로만 확인 — **브라우저 스와이프·위치감지는 미확인** |
+| 위치 입력 | **완료** 브라우저 위치 감지(`UseMyLocation`) + 장소 이름 검색(`searchPlaces`). 하드코딩 출발지 목록 없음 | HTTP 로 검색 경로 확인 |
+| 인원수·확정 | **완료** 인원수가 예상 지출에 반영되고, 확정하면 길찾기·전화 체크리스트를 준다 (예약은 하지 않는다) | HTTP 로 확인 |
 
 **후보 장소 숫자 세 개를 구분하세요.** 헷갈리면 "왜 후보가 이것밖에 없냐"는 질문에 답을 못 합니다.
 
@@ -44,12 +46,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 나머지 9곳(81 − 72)은 영업시간은 읽었지만 휴무일이 비어 있거나 '매월 첫째 화요일'처럼 주간
 표에 담을 수 없어서 자동 편성에서 빠집니다. 화면의 '제외한 후보' 에 이유와 함께 나옵니다.
 
-`npm run dev` 후 아래 리허설 URL 을 열면 발표 흐름이 그대로 나옵니다. **한 줄입니다** —
-줄바꿈이 섞이면 안 되니 그대로 복사해서 북마크하세요.
+`npm run dev` 후 아래 URL 을 열면 발표 흐름이 그대로 나옵니다. **한 줄입니다.**
 
 ```
-/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00
+/?go=1&cause=ferry_cancelled&from=성산항&remaining=300&party=2&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00
 ```
+
+**출발지는 하드코딩하지 않습니다.** 위치는 브라우저 감지(`lat`/`lng`)나 장소 이름 검색
+(`from`, 스냅샷 안에서 찾음)으로 받고, **둘 다 없으면 계획을 만들지 않고 위치를 요청합니다** —
+임의의 지점으로 채우면 '지금 있는 곳 주변' 이라는 전제가 거짓이 됩니다.
 
 **남은 일**
 1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)는 HTTP 로 검증할 수 없어 아직 손으로
@@ -127,7 +132,10 @@ src/app/page.tsx                 시연 화면 (서버 렌더링 + GET). SwipeSl
    비짓제주는 승인이 수일 걸려 못 받았고 관광공사로 대체했습니다.
    **`EXPOSURE_BY_CAT3`가 이 파일에서 제일 조심할 표입니다** — 이 값이 틀리면 기상 필터가
    그대로 틀립니다. 새 카테고리 코드가 생기면 `check:places`가 '미분류'로 잡아냅니다.
-2. ~~`src/lib/data/weather.ts`~~ — **완료.** 기상청 단기예보+특보 실시간 호출이 들어갔습니다.
+2. ~~`src/lib/data/weather.ts`~~ — **완료(단기예보), 특보는 응답 거부.** 단기예보는 실키로
+   동작합니다. **기상특보는 403** 이라 `warnings` 가 항상 비고 `warningsOk: false` 입니다 —
+   화면은 이 값을 보고 "특보 조회 실패, 판정에 안 들어감" 이라고 적습니다. 특보 키가 승인되면
+   문구가 자동으로 바뀝니다. 아래 설명은 단기예보 기준입니다.
    `DATA_GO_KR_KEY`만 `.env.local`에 넣으면 됩니다. `getWeather()`는 throw하지 않고
    실패 시 `isFallback: true`로 돌려줍니다. 실키로 한 번 확인한 뒤에 화면의
    '기상 임시 선택' 컨트롤을 제거하세요 (`isFallback`일 때는 남겨둬야 합니다).

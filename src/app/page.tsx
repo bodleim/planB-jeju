@@ -4,13 +4,13 @@
  * **서버 렌더링 + GET 링크로만 동작한다.** 상태는 전부 쿼리스트링에 있고 클라이언트 JS 는
  * 스와이프 편의 장치뿐이다 (`SwipeSlot`). 무대에서 네트워크나 JS 가 흔들려도 화면은 뜬다.
  *
- * 리허설 URL 예:
- *   /?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00
- *     &companion=couple&activity=indoor&checkin=16:00
+ * 출발 위치는 브라우저 위치 감지(lat/lng) 또는 장소 이름 검색(from)으로 받는다.
+ * 하드코딩된 출발지 목록은 두지 않는다 — 그건 시연용 지름길이고, 실제로는 사용자가 어디에
+ * 있을지 모른다. 위치가 없으면 계획을 만들지 않고 위치를 요청한다.
  *
- * `at` 을 비우면 실제 현재 시각을 쓴다 — 새벽에 열면 후보가 0곳이 되므로 리허설에는 넣는다.
+ * `at` 을 비우면 실제 현재 시각을 쓴다 (원하는 출발 시각을 직접 넣을 수도 있다).
  */
-import { ORIGINS, PLACES_SNAPSHOT } from '@/lib/data/places.ts'
+import { PLACES_SNAPSHOT, searchPlaces } from '@/lib/data/places.ts'
 import { findCandidates, type Rejection } from '@/lib/filter/index.ts'
 import { isInJeju } from '@/lib/geo.ts'
 import { DEFAULT_POLICY, buildPlan, pinsFromQuery, pinsToQuery, swapPins } from '@/lib/plan/index.ts'
@@ -27,6 +27,7 @@ import {
   type Weekday,
 } from '@/lib/types.ts'
 import SwipeSlot from './SwipeSlot'
+import UseMyLocation from './UseMyLocation'
 
 type Query = Record<string, string | string[] | undefined>
 
@@ -72,8 +73,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
 
   const clock = jejuClock()
   const cause = (one(q, 'cause') || 'ferry_cancelled') as Cause
-  const originKey = one(q, 'origin') || 'seongsan_port'
+  const from = one(q, 'from')
   const remaining = Math.min(720, Math.max(30, Number(one(q, 'remaining')) || 300))
+  const party = Math.min(12, Math.max(1, Number(one(q, 'party')) || 1))
+  const confirmed = one(q, 'confirm') === '1'
   const hasCar = one(q, 'car') !== 'no'
   const companion = (one(q, 'companion') || 'couple') as CompanionType
   const activity = (one(q, 'activity') || 'indoor') as ActivityStyle
@@ -83,21 +86,25 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   const seed = Number(one(q, 'seed')) || 1
   const pins = pinsFromQuery(one(q, 'pins'))
 
-  // 위치는 감지값(lat/lng)이 있으면 그걸 쓰고, 없거나 제주 밖이면 ORIGINS 로 폴백한다.
+  // 출발 위치는 두 경로로 받는다. 하드코딩된 목록은 없다.
+  //   1) lat/lng — 브라우저 위치 감지 (UseMyLocation 이 넣는다)
+  //   2) from    — 장소 이름 검색. 우리가 가진 후보 데이터 안에서 찾으므로 외부 호출이 없고
+  //                JS 없이도 된다. 위치 권한을 거부하는 건 정상 경로다.
   const lat = Number(one(q, 'lat'))
   const lng = Number(one(q, 'lng'))
   const detected =
     Number.isFinite(lat) && Number.isFinite(lng) && isInJeju({ lat, lng }) ? { lat, lng } : null
-  const fallbackOrigin = ORIGINS[originKey] ?? ORIGINS.seongsan_port
-  const origin = detected ?? fallbackOrigin.coord
-  const originLabel = detected ? '현재 위치' : fallbackOrigin.label
+  const matches = detected === null && from !== '' ? searchPlaces(from) : []
+  const origin = detected ?? (matches[0] ? matches[0].coord : null)
+  const originLabel = detected ? '현재 위치' : (matches[0]?.name ?? null)
 
   const href = (over: Record<string, string | number | null>) => {
     const base: Record<string, string> = {
       go: '1',
       cause,
-      origin: originKey,
+      ...(from ? { from } : {}),
       remaining: String(remaining),
+      party: String(party),
       car: hasCar ? 'yes' : 'no',
       companion,
       activity,
@@ -129,11 +136,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
           <Field label="무슨 일이 있었나요">
             <Select name="cause" value={cause} options={Object.entries(CAUSE_LABELS)} />
           </Field>
-          <Field label="지금 어디에 있나요">
-            <Select
-              name="origin"
-              value={originKey}
-              options={Object.entries(ORIGINS).map(([k, v]) => [k, v.label] as [string, string])}
+          <Field label="지금 어디에 있나요 (장소 이름)">
+            <input
+              type="search"
+              name="from"
+              defaultValue={from}
+              placeholder="예: 성산항, 광치기해변"
+              className={inputClass}
             />
           </Field>
           <Field label="남은 시간(분)">
@@ -174,6 +183,13 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
               className={inputClass}
             />
           </Field>
+          <Field label="인원">
+            <input type="number" name="party" defaultValue={party} min={1} max={12} className={inputClass} />
+          </Field>
+        </div>
+        {/* 위치 감지는 편의 장치다. 거부되거나 JS 가 없으면 위의 장소 검색으로 정한다. */}
+        <div className="mt-3">
+          <UseMyLocation base={href({ lat: null, lng: null, from: null, pins: null, confirm: null })} />
         </div>
         <button
           type="submit"
@@ -197,6 +213,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
           activity={activity}
           pins={pins}
           seed={seed}
+          party={party}
+          confirmed={confirmed}
+          matches={matches}
+          from={from}
           href={href}
         />
       ) : (
@@ -223,10 +243,14 @@ async function Result({
   activity,
   pins,
   seed,
+  party,
+  confirmed,
+  matches,
+  from,
   href,
 }: {
-  origin: LatLng
-  originLabel: string
+  origin: LatLng | null
+  originLabel: string | null
   cause: Cause
   remaining: number
   hasCar: boolean
@@ -237,8 +261,24 @@ async function Result({
   activity: ActivityStyle
   pins: readonly string[]
   seed: number
+  party: number
+  confirmed: boolean
+  matches: readonly Place[]
+  from: string
   href: (over: Record<string, string | number | null>) => string
 }) {
+  // 위치가 없으면 계획을 만들지 않는다. 임의의 지점으로 대신 채우면 '지금 있는 곳 주변' 이라는
+  // 전제가 거짓이 된다 — 사용자가 위치를 정하게 하고 왜 필요한지 적는다.
+  if (origin === null) {
+    return (
+      <Notice tone="warn">
+        <b>출발 위치가 필요합니다.</b> 남은 시간 안에 갈 수 있는 곳을 고르려면 지금 있는 곳을
+        알아야 합니다. 위의 <b>현재 위치 사용</b>을 누르거나 장소 이름을 검색하세요.
+        {from !== '' && <span> &lsquo;{from}&rsquo; 로 찾은 결과가 없습니다.</span>}
+      </Notice>
+    )
+  }
+
   // F3 — 하드 제약. 기상 호출이 실패해도 던지지 않는다 (폴백 후 '확인 필요' 표시).
   const filtered = await findCandidates({
     origin,
@@ -259,6 +299,7 @@ async function Result({
       category: { companion, activity },
       hasCar,
       weekday,
+      partySize: party,
     },
     filtered.candidates,
     DEFAULT_POLICY,
@@ -280,6 +321,20 @@ async function Result({
           <Tag tone="warn">제외 기준 위험 {filtered.risks.map((r) => RISK_LABELS[r]).join('·')}</Tag>
         )}
       </div>
+
+      {matches.length > 1 && (
+        <Notice>
+          &lsquo;{from}&rsquo; 로 <b>{matches[0].name}</b> 를 출발지로 잡았습니다. 다른 곳이라면:{' '}
+          {matches.slice(1, 6).map((m, i) => (
+            <span key={m.id}>
+              {i > 0 && ' · '}
+              <a className="underline" href={href({ from: m.name, pins: null })}>
+                {m.name}
+              </a>
+            </span>
+          ))}
+        </Notice>
+      )}
 
       {filtered.weatherFallback && (
         <Notice tone="warn">
@@ -304,12 +359,26 @@ async function Result({
               {formatHm(plan.totals.startMinutes)}~{formatHm(plan.totals.endMinutes)} ·{' '}
               {plan.slots.length}곳
             </h2>
-            <a
-              href={href({ seed: seed + 1, pins: null })}
-              className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
-            >
-              전체 새로 짜기
-            </a>
+            <div className="flex shrink-0 gap-2">
+              {!confirmed && (
+                <a
+                  href={href({ seed: seed + 1, pins: null })}
+                  className="rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-stone-100"
+                >
+                  전체 새로 짜기
+                </a>
+              )}
+              <a
+                href={href(confirmed ? { confirm: null } : { confirm: 1 })}
+                className={
+                  confirmed
+                    ? 'rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-stone-100'
+                    : 'rounded-lg bg-stone-900 px-3 py-1.5 text-sm font-semibold text-white hover:bg-stone-700'
+                }
+              >
+                {confirmed ? '다시 고르기' : '이 일정으로 확정'}
+              </a>
+            </div>
           </div>
 
           <ol className="space-y-3">
@@ -318,18 +387,23 @@ async function Result({
               const next = swapPins(view, slot.index, 1)
               const prevHref = prev === null ? null : href({ pins: pinsToQuery(prev) })
               const nextHref = next === null ? null : href({ pins: pinsToQuery(next) })
+              const card = (
+                <SlotCard
+                  index={slot.index}
+                  place={slot.chosen.visit.place}
+                  visit={slot.chosen.visit}
+                  alternatives={confirmed ? [] : slot.alternatives.map((a) => a.visit.place.name)}
+                  prevHref={confirmed ? null : prevHref}
+                  nextHref={confirmed ? null : nextHref}
+                />
+              )
               return (
                 <li key={slot.index}>
-                  <SwipeSlot prevHref={prevHref} nextHref={nextHref}>
-                    <SlotCard
-                      index={slot.index}
-                      place={slot.chosen.visit.place}
-                      visit={slot.chosen.visit}
-                      alternatives={slot.alternatives.map((a) => a.visit.place.name)}
-                      prevHref={prevHref}
-                      nextHref={nextHref}
-                    />
-                  </SwipeSlot>
+                  {confirmed ? card : (
+                    <SwipeSlot prevHref={prevHref} nextHref={nextHref}>
+                      {card}
+                    </SwipeSlot>
+                  )}
                 </li>
               )
             })}
@@ -346,6 +420,20 @@ async function Result({
             없는 곳은 유형별 평균으로 잡았습니다.
           </p>
 
+          {confirmed && (
+            <Notice tone="warn">
+              <b>확정했습니다.</b> 이 앱은 예약하지 않습니다 — 각 방문지의 <b>길찾기</b>로 이동하고,
+              운영 여부가 걱정되면 <b>전화</b>로 확인하세요. 아래 시각은 도착·이용 예상 시각입니다.
+              <ul className="mt-2 list-disc pl-5">
+                {plan.slots.map((s2) => (
+                  <li key={s2.index}>
+                    {formatHm(s2.chosen.visit.startMinutes)} {s2.chosen.visit.place.name}
+                    {s2.chosen.visit.place.phone ? ` · ${s2.chosen.visit.place.phone}` : ' · 전화번호 없음'}
+                  </li>
+                ))}
+              </ul>
+            </Notice>
+          )}
           {plan.needsConfirmation.length > 0 && (
             <Notice tone="warn">
               운영정보가 확인되지 않은 곳이 있습니다 — 방문 전에 전화나 공식 페이지로 확인하세요:{' '}
@@ -373,9 +461,19 @@ async function Result({
           운영정보를 확인한 {PLACES_SNAPSHOT.loaded}곳만 후보로 씁니다)
         </p>
         <p className="mt-1">
-          기상: <b>기상청 단기예보·기상특보</b> 실시간 호출
-          {filtered.weatherFallback ? ' (지금은 폴백)' : ''} · 여객선 결항 여부는 공개 API가 없어
-          사용자 입력으로 받습니다.
+          기상 판정 출처: <b>{filtered.weatherSource}</b>
+          {!filtered.weatherFallback && !filtered.warningsOk && (
+            <> — 기상특보 조회는 실패했습니다(응답 거부). 특보는 판정에 들어가지 않았습니다.</>
+          )}
+          {filtered.warningsOk && filtered.warnings.length > 0 && (
+            <> — 발효 중인 특보: {filtered.warnings.join(', ')}</>
+          )}
+          {filtered.warningsOk && filtered.warnings.length === 0 && <> — 발효 중인 특보 없음</>}
+        </p>
+        <p className="mt-1">
+          여객선 결항 여부는 공개 API가 없어 <b>사용자 입력</b>으로 받습니다. 배로만 가는 곳은
+          배편 시간표를 반영할 수 없어 자동 편성에서 제외합니다.
+          {!hasCar && ' 차량 없음일 때의 대중교통 시간은 평균 속도 기반 추정이며 실제 버스 시간표가 아닙니다.'}
         </p>
         <p className="mt-1">
           이 화면은 운영 여부를 확정하지 않습니다. 방문 전 확인이 필요한 정보는 전화·공식 페이지로

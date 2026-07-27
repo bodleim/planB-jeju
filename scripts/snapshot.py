@@ -21,33 +21,83 @@ OUT = os.path.join(apis.ROOT, "src", "lib", "data", "snapshots")
 # ponytail: 응답을 원형 그대로 저장한다. 실제 스키마를 확인하기 전에 파서를 쓰면
 #           틀린 파서가 남는다. 성산권 필터·필드 정규화는 TS 로더에서 처리할 것.
 
-# 성산항 기준 반경(m)과 유형별 수집 개수. 개발계정 1,000건/일이라
-# 목록 5회 + 상세 = 아래 합계만큼 쓴다. 넉넉히 늘리기 전에 잔여 호출을 확인할 것.
-SEONGSAN = (33.4744, 126.9319)
-TOUR_RADIUS = 15000
-TOUR_ROWS = {12: 40, 14: 15, 28: 15, 38: 15, 39: 45}
+# 제주 전역 수집. 특정 지점 반경이 아니라 areaCode=39 전체를 받는다 —
+# 서비스가 성산권에서만 도는 건 시연이고, 제주 어디서 열어도 후보가 나와야 기능이다.
+#
+# 목록은 유형별 페이지네이션이라 싸다(유형당 1~6회). 비싼 건 detailIntro2 로,
+# **장소 1곳당 1회**다. 제주 전역이 약 1,016곳이라 개발계정(1,000건/일)으로는 이틀 걸린다.
+# 그래서 이 수집기는 **재개 가능**하다 — 이미 상세를 받은 곳은 건너뛰고, 예산만큼만 더 받는다.
+#
+#   python3 scripts/snapshot.py tour-jeju              # 남은 것 전부 시도
+#   TOUR_BUDGET=600 python3 scripts/snapshot.py tour-jeju   # 상세 호출 600회만
+#
+# 목록에서 사라진 장소는 스냅샷에서도 지운다(폐업 등). 상세 캐시는 id 기준으로 살린다.
+TOUR_AREA = 39  # 제주특별자치도
+LIST_ROWS = 100
+DEFAULT_BUDGET = 1000
 
 
-def tour_seongsan():
-    """성산권 후보 + 유형별 운영정보. 목록 항목에 detailIntro2 응답을 intro 로 붙여 돌려준다."""
-    out = []
-    for content_type, rows in TOUR_ROWS.items():
-        listed = apis.tour_items(
-            apis.tour_nearby(*SEONGSAN, radius=TOUR_RADIUS, content_type=content_type, rows=rows)
-        )
-        for item in listed:
+def _existing(name):
+    """이전 스냅샷을 contentid → item 으로. 없으면 빈 dict."""
+    path = os.path.join(OUT, f"{name}.json")
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        payload = json.load(f)
+    return {str(it["contentid"]): it for it in payload.get("data", []) if it.get("contentid")}
+
+
+def tour_jeju():
+    """제주 전역 후보 + 운영정보. 상세는 예산 안에서 재개 수집한다."""
+    budget = int(os.environ.get("TOUR_BUDGET") or DEFAULT_BUDGET)
+    # 성산권 스냅샷을 먼저 만들었다면 그 상세를 물려받는다 (같은 contentid 체계다).
+    cache = {**_existing("tour-seongsan"), **_existing("tour-jeju")}
+
+    listed = {}
+    for content_type, label in apis.TOUR_TYPES.items():
+        page, total = 1, None
+        while total is None or len(
+            [k for k, v in listed.items() if str(v["contenttypeid"]) == str(content_type)]
+        ) < total:
+            res = apis.tour_area(content_type=content_type, area=TOUR_AREA, rows=LIST_ROWS, page=page)
+            total = apis.tour_total(res)
+            items = apis.tour_items(res)
+            if not items:
+                break
+            for it in items:
+                listed[str(it["contentid"])] = it
+            page += 1
+        got = len([v for v in listed.values() if str(v["contenttypeid"]) == str(content_type)])
+        print(f"      목록 {content_type} {label:<6} {got}/{total}곳")
+
+    need = [cid for cid in listed if not (cache.get(cid) or {}).get("intro")]
+    print(f"      상세: 전체 {len(listed)}곳 중 {len(listed) - len(need)}곳 캐시 보유, {len(need)}곳 필요")
+    if len(need) > budget:
+        print(f"      예산 {budget}회로 {budget}곳만 받는다. 나머지 {len(need) - budget}곳은 다시 실행하면 이어서 받는다.")
+
+    out, fetched, failed = [], 0, 0
+    for cid, item in listed.items():
+        intro = (cache.get(cid) or {}).get("intro")
+        if intro is None and fetched < budget and cid in set(need):
             try:
-                intro = apis.tour_items(apis.tour_intro(item["contentid"], content_type))
+                got = apis.tour_items(apis.tour_intro(cid, item["contenttypeid"]))
+                intro = got[0] if got else None
+                fetched += 1
             except Exception as e:  # noqa: BLE001 - 한 곳의 상세 실패가 수집 전체를 막지 않는다
-                print(f"      intro 실패 {item.get('title')}: {type(e).__name__}: {e}")
-                intro = []
-            out.append({**item, "intro": intro[0] if intro else None})
-        print(f"      {content_type} {apis.TOUR_TYPES[content_type]:<6} {len(listed)}곳")
+                failed += 1
+                if failed <= 5:
+                    print(f"      intro 실패 {item.get('title')}: {type(e).__name__}: {e}")
+                if failed > 40:
+                    print("      intro 실패가 40회를 넘어 상세 수집을 멈춘다 (쿼터 소진 의심)")
+                    budget = fetched
+        out.append({**item, "intro": intro})
+    have = sum(1 for it in out if it.get("intro"))
+    print(f"      상세 확보 {have}/{len(out)}곳 (이번에 {fetched}회 호출, 실패 {failed})")
     return out
 
 
 SOURCES = {
-    "tour-seongsan": ("DATA_GO_KR_KEY", "한국관광공사_국문 관광정보 서비스_GW (15101578)", tour_seongsan),
+    "tour-jeju": ("DATA_GO_KR_KEY", "한국관광공사_국문 관광정보 서비스_GW (15101578) / areaBasedList2 + detailIntro2, areaCode 39", tour_jeju),
     # 비짓제주는 페이지네이션 — c1 관광지 위주로 몇 페이지만. 성산권 필터는 로더에서.
     "visitjeju": ("VISITJEJU_KEY", "비짓제주 관광정보", lambda: [apis.visitjeju(category="c1", page=p) for p in (1, 2, 3)]),
     "jeju-traffic": ("JEJU_ITS_KEY", "제주 ITS 실시간 교통정보", apis.jeju_traffic),

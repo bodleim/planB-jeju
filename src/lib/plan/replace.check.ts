@@ -9,7 +9,7 @@
  * 유지되는지를 함께 본다 — 대안이라는 이유로 문 닫은 곳이 들어오면 시연이 무너진다.
  */
 import assert from 'node:assert/strict'
-import { SEONGSAN_PLACES, ORIGINS } from '../data/places.ts'
+import { SEONGSAN_PLACES } from '../data/places.ts'
 import { EXPOSURE_RISKS, filterCandidates, type FilterContext } from '../filter/index.ts'
 import { DEFAULT_POLICY, buildPlan, isSingleCategory, reshuffle, setKey, swapSlot } from './index.ts'
 import { pinsFromQuery, pinsToQuery } from './replace.ts'
@@ -25,7 +25,7 @@ const REMAINING = 300
 // ------------------------------------------------------------------ F3: 실데이터 + 결항
 
 const ctx: FilterContext = {
-  origin: ORIGINS.seongsan_port.coord,
+  origin: { lat: 33.4744, lng: 126.9319 },
   startMinutes: START,
   weekday: MONDAY,
   remainingMinutes: REMAINING,
@@ -37,7 +37,7 @@ const ctx: FilterContext = {
     isFallback: true,
     grid: { nx: 60, ny: 37 },
     hourly: [],
-    warnings: [],
+    warnings: [], warningsOk: false,
     risks: [],
   },
   policy: DEFAULT_POLICY,
