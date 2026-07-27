@@ -26,21 +26,41 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | 기상 데이터 | **완료** `src/lib/data/weather.ts` — 단기예보+특보 실시간, 실패 시 `isFallback` 폴백 | `npm run check:weather` |
 | 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 `congestion` 인자로 대기 | (필터 체크에 포함) |
-| 후보 장소 | **완료 — 실데이터** `src/lib/data/places.ts` + `snapshots/tour-seongsan.json` (관광공사 TourAPI 103곳 수집 → 운영정보 확인된 81곳 적재) | `npm run check:places` |
-| F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 제약 + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
+| 스냅샷 수집 | **완료** `scripts/apis.py`(`tour_nearby`·`tour_intro`·`tour_common`·`tour_items`) + `scripts/snapshot.py` 의 `tour-seongsan` — 성산항 반경 15km, 유형 5종(관광지·문화시설·레포츠·쇼핑·음식점), 1회 목록 5 + 상세 130 = **135건** | `npm run check:api` (관광공사 2건 실키 OK) |
+| 후보 장소 | **완료 — 실데이터** `src/lib/data/places.ts` + `snapshots/tour-seongsan.json`. 관광공사 TourAPI **103곳 수집 → 81곳 적재 → 그중 `verified: true` 72곳**. 세 숫자가 다릅니다 (바로 아래 설명) | `npm run check:places` |
+| F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
 | F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
 | F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
-| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | 브라우저로 확인 |
+| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | HTTP 로만 확인 — **브라우저 스와이프는 미확인** |
 
-`npm run dev` 후 아래 리허설 URL 을 열면 발표 흐름이 그대로 나옵니다.
+**후보 장소 숫자 세 개를 구분하세요.** 헷갈리면 "왜 후보가 이것밖에 없냐"는 질문에 답을 못 합니다.
+
+| 숫자 | 뜻 |
+|---|---|
+| 103 | 관광공사에서 받은 원본 건수 (`snapshots/tour-seongsan.json`) |
+| 81 | 영업시간(`usetime`)을 확신 있게 읽어 `Place` 로 만든 곳 |
+| **72** | 휴무일(`restdate`)까지 읽어 `verified: true` 가 된 곳 = **`DEFAULT_POLICY` 에서 실제로 편성되는 곳** |
+
+나머지 9곳(81 − 72)은 영업시간은 읽었지만 휴무일이 비어 있거나 '매월 첫째 화요일'처럼 주간
+표에 담을 수 없어서 자동 편성에서 빠집니다. 화면의 '제외한 후보' 에 이유와 함께 나옵니다.
+
+`npm run dev` 후 아래 리허설 URL 을 열면 발표 흐름이 그대로 나옵니다. **한 줄입니다** —
+줄바꿈이 섞이면 안 되니 그대로 복사해서 북마크하세요.
 
 ```
-/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00
-  &companion=couple&activity=indoor&checkin=16:00
+/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00
 ```
 
-**남은 일** — 리허설(실제 브라우저에서 스와이프 손으로 확인) → 배포. 스냅샷을 다시 받으려면
-`npm run snapshot` (관광공사 개발계정 1,000건/일, 1회 수집에 약 135건 씁니다).
+**남은 일**
+1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)는 HTTP 로 검증할 수 없어 아직 손으로
+   확인하지 않았습니다. 이전/다음 링크는 검증됐습니다.
+2. 배포.
+3. **판단이 필요한 것** — 아쿠아플라넷 제주가 후보에서 빠집니다 (TourAPI 가 휴무일을 비워
+   둠). 도메인 규칙 4를 그대로 따른 결과이고 화면에 이유도 나오지만, 성산권 대표 실내
+   명소라 발표에서 아쉬울 수 있습니다. 넣으려면 `places.ts` 의 `verified: closed !== null`
+   한 줄을 고치면 되는데, 규칙을 굽히는 쪽이라 그대로 뒀습니다.
+
+스냅샷을 다시 받으려면 `npm run snapshot` (관광공사 개발계정 1,000건/일, 1회 약 135건).
 
 ### F3 → F1 파이프라인 (이 두 개가 어떻게 붙어 있는지)
 
