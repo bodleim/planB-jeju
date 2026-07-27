@@ -32,7 +32,8 @@ export function isInJeju(coord: LatLng): boolean {
 
 /**
  * 위치 감지 결과(또는 쿼리 문자열)를 좌표로 바꾼다. 숫자가 아니거나 제주 밖이면 null이다.
- * 호출한 쪽은 null일 때 ORIGINS의 폴백 지점을 쓰고 화면에 그 사실을 표시해야 한다.
+ * 호출한 쪽은 null일 때 장소 이름 검색(searchPlaces)으로 받거나, 그것도 없으면 계획을 만들지
+ * 않고 위치를 요청해야 한다 — 임의의 지점으로 채우면 '지금 있는 곳 주변'이 거짓이 된다.
  */
 export function parseJejuCoord(lat: unknown, lng: unknown): LatLng | null {
   const parsedLat = typeof lat === 'number' ? lat : Number(lat);

@@ -82,10 +82,11 @@ src/lib/plan/generate.ts         F1. generatePlan(input, candidates, policy), tr
 src/lib/plan/replace.ts          F2. buildPlan / swapPins / swapSlot / reshuffle
 src/lib/plan/score.ts            점수식과 카테고리 적합도 계산
 src/lib/plan/types.ts            PlanInput, Plan, PlanSlot, PlanPolicy, 탈락 이유
-src/lib/data/places.ts           TourAPI 스냅샷 → Place[] + ORIGINS + FERRY_BOUNDS
+src/lib/data/places.ts           TourAPI 스냅샷 → Place[], searchPlaces(), needsBoatFrom()
 src/lib/data/tour-hours.ts       usetime/restdate 자유 텍스트 → WeeklyHours (정규식만)
 src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제주 시각, 시드 난수
-src/app/page.tsx                 시연 화면 (서버 렌더링 + GET). SwipeSlot.tsx 만 클라이언트
+src/app/page.tsx                 시연 화면 (서버 렌더링 + GET)
+src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이프·위치 감지)
 ```
 
 - **F3가 `Place[]`를 걸러 `Place[]`를 주고, F1이 그걸 인자로 받습니다.** 화면은
@@ -112,9 +113,10 @@ src/app/page.tsx                 시연 화면 (서버 렌더링 + GET). SwipeSl
   무대에서 JS가 죽어도 스와이프 대신 이전/다음 링크로 동작합니다. `SwipeSlot.tsx`만
   클라이언트이고, 하는 일은 그 링크로 이동하는 것뿐입니다.
 - 리허설 URL을 북마크하세요:
-  `/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00`
+  `/?go=1&cause=ferry_cancelled&from=성산항&remaining=300&party=2&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00`
   `at`을 비우면 실제 현재 시각입니다 — 새벽에 열면 후보 0곳이 됩니다.
-  위치는 `lat`/`lng`가 있으면 그걸 쓰고, 없거나 제주 밖이면 `ORIGINS`로 폴백합니다.
+  위치는 `lat`/`lng`(브라우저 감지)가 있으면 그걸 쓰고, 없으면 `from`(장소 이름 검색)을
+  씁니다. **둘 다 없으면 계획을 만들지 않고 위치를 요청합니다.**
 - `pins`는 **장소 id**를 담습니다. '2번째 대안' 같은 인덱스로 저장하면 출발 시각이 바뀔 때
   링크가 가리키는 곳이 달라집니다.
 - 스와이프 순회 순서는 **점수 내림차순, 동점은 id**로 고정합니다. 채택안을 맨 앞에 두면
@@ -166,7 +168,7 @@ src/app/page.tsx                 시연 화면 (서버 렌더링 + GET). SwipeSl
 
 | 입력 | 설명 |
 |---|---|
-| 위치 | 브라우저 위치 감지. 거부되거나 제주 밖이면 `ORIGINS`의 지점으로 폴백 (`parseJejuCoord`) |
+| 위치 | 브라우저 위치 감지(`lat`/`lng`) 또는 장소 이름 검색(`from` → `searchPlaces`). 둘 다 없으면 계획을 만들지 않습니다 |
 | 시간 | 시작 시각과 남은 시간 (또는 종료 시각) |
 | 추천 카테고리 | **두 축**. 동반 유형(가족·커플·혼자) 하나 + 활동 성격(실내 위주·먹거리·액티비티) 하나 |
 
@@ -247,7 +249,9 @@ API로 확인합니다. API가 실패하면 계획 생성이 멈추는 게 아�
 - **배를 타야 하는 곳(`dependsOn`)은 결항이 아니어도 제외합니다.** `estimateTravelMinutes`가
   육로 거리 기반이라 배편 시간표·대기시간을 모릅니다. 그대로 두면 성산항에서 우도 후보까지
   '차로 10분'으로 계산해 실행 불가능한 일정이 나옵니다. 단 **이미 그 섬 안에 있으면**
-  (`FERRY_BOUNDS`) 허용합니다. 여객선 시간표 API가 생기면 이 제약을 풀 수 있습니다.
+  (`needsBoatFrom`/`islandOf` 가 좌표로 판정) 허용합니다. 부속섬은 우도·추자도·마라도·
+  가파도·비양도 다섯 곳을 좌표 상자로 정의해 뒀습니다 — 주소·제목으로 판정하면 '마라도
+  가파도 정기여객선'(육지 항구)까지 섬으로 잡힙니다. 여객선 시간표 API가 생기면 풀 수 있습니다.
 - `EXPOSURE_RISKS.marine`에 `rain`이 들어 있습니다 — 우천에 유람선을 대안으로 내놓으면
   '같은 위험은 피한다'는 약속이 깨집니다.
 
@@ -303,9 +307,9 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 | API | 처리 방식 | 용도 |
 |---|---|---|
 | 기상청_단기예보 조회서비스 (15000099) | **실시간 호출** | 우천·강풍·폭염 필터 |
-| 기상청_기상특보 조회서비스 | **실시간 호출** | 강풍·풍랑 특보 → "같은 위험 후보 제거"의 근거 |
+| 기상청_기상특보 조회서비스 | ❌ **403 응답 거부** — 호출은 넣어 뒀고 실패를 삼킨다(`warningsOk: false`) | 승인되면 강풍·풍랑 특보가 근거로 붙는다. 지금은 판정에 안 들어감 |
 | 한국관광공사_국문 관광정보 서비스_GW (15101578) | **사전 수집 → JSON 고정 (완료)** | 후보 장소, 운영정보 |
-| 국토교통부_(TAGO)_버스정류소정보 | **사전 수집 → JSON 고정** | 도보권 정류소 |
+| 국토교통부_(TAGO)_버스정류소정보 | ❌ **미수집** (키는 되고 `bus_stops_nearby` 도 있음) | 도보권 정류소. 없어서 차량 없음일 때 이동시간이 평균속도 추정이다 |
 | 국토교통부_(TAGO)_버스도착정보 | 미사용 (차량 시연) | — |
 | 여객선 결항 | 공개 API 없음 → **사용자 입력** | 중단 원인 |
 
