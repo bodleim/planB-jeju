@@ -20,44 +20,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 구현 현황
 
-| | 상태 |
-|---|---|
-| F3 후보 필터 | 로직 완료 (`src/lib/filter/`) — 임시 데이터로 동작 확인 (`npm run check:filter`). 진입점은 `findCandidates()`. 결항은 사용자 입력 |
-| F1 계획 생성 | 로직 완료 (`src/lib/plan/`) — 생성 2ms, 목표 30초 대비 여유. **카테고리 입력은 미구현** |
-| F2 대안 교체 | 화면만 완료 (`/` + `src/app/_components/`) — 선택 → 길찾기까지 연결. **스와이프·새로고침 재생성 미구현** |
+**2026-07-27 기준.** 이 표는 실제 파일 상태입니다 — 없는 걸 완료로 적지 마세요.
+직전 버전이 F1·F2를 완료로 적어 뒀지만 코드가 없었고, 그걸 믿고 작업하면 시간을 버립니다.
 
-기존 3안 생성·비교 화면 코드는 그대로 재사용합니다. 남은 일은 F1의 카테고리 입력과
-F2의 스와이프·새로고침, 그리고 실데이터 교체와 시연 준비입니다.
+| | 상태 | 검증 |
+|---|---|---|
+| 기상 데이터 | **완료** `src/lib/data/weather.ts` — 단기예보+특보 실시간, 실패 시 `isFallback` 폴백 | `npm run check:weather` |
+| 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 보류 | (필터 체크에 포함) |
+| F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 4개 제약 + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
+| 후보 장소 | ⚠️ **임시 데이터** `src/lib/data/places-seongsan.ts` — 성산권 14곳, 전부 `verified: false` | — |
+| F1 계획 생성 | ❌ **미구현.** `src/lib/plan/` 없음 | — |
+| F2 대안 교체 | ❌ **미구현.** 화면이 없습니다 (`src/app/page.tsx` 는 Hello world) | — |
+| 시연 화면 | ❌ **미구현.** `/`, `/dev/filter`, `/dev/plan` 전부 없음 | — |
 
-- `/` — 시연 화면. 입력 → 계획 생성 → 시간대별 대안 교체 → 실행(길찾기·운영정보 확인 링크).
-  전부 서버 렌더링이고 폼은 GET입니다. 클라이언트 JS에 의존하지 않으니 무대에서
-  네트워크가 흔들려도 화면은 뜹니다. 이 구조를 바꾸지 마세요.
-- 시연 URL은 쿼리로 고정할 수 있습니다. 리허설에는 이걸 북마크하세요:
-  `/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&weather=wind&checkin=16:00&at=10:00`
-  `at`을 비우면 실제 현재 시각을 씁니다 (새벽에 열면 후보 0곳이 됩니다).
+지금 눈으로 확인할 수 있는 건 `npm run check:filter` 콘솔 출력뿐입니다. 발표 시나리오
+(성산항 결항 / 5시간 / 차량)를 그대로 돌려 후보 8곳·제외 6곳과 제외 이유를 출력합니다.
+
+**남은 일** — F1 계획 생성 → F2 화면·스와이프 → 실데이터 교체 → 시연 준비.
+
+### 만들 때 지킬 것 (아직 코드가 없는 부분의 설계 결정)
+
+- `/` 시연 화면은 **서버 렌더링 + GET 폼**으로 만드세요. 클라이언트 JS에 의존하지 않으면
+  무대에서 네트워크가 흔들려도 화면은 뜹니다.
+- 시연 URL을 쿼리로 고정할 수 있게 만들고 리허설에는 그걸 북마크하세요. 예:
+  `/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00`
+  `at`을 받아야 합니다 — 비우면 실제 현재 시각이라 새벽에 열면 후보 0곳이 됩니다.
 - `/dev/filter`, `/dev/plan` — 확인용 개발 페이지. 시연 화면이 아닙니다.
-- **F1·F2가 지키는 불변식** — 이걸 깨는 변경은 되돌리세요.
-  - 모든 방문지는 도착 시각에 실제로 열려 있다 (`tryVisit`이 보장)
+- **F1·F2가 지킬 불변식** — 이걸 깨는 변경은 되돌리세요.
+  - 모든 방문지는 도착 시각에 실제로 열려 있다 (`tryVisit`이 보장. F3의
+    `visitWindow()` 위에 올릴 것 — 별도 판정을 만들면 이 불변식이 깨집니다)
   - 스와이프·새로고침으로 바뀐 결과도 같은 제약을 통과한다
   - 제시되는 대안들은 서로 다른 장소 조합 (`setKey`로 판정)
 
 ### API 키가 나오면 갈아끼울 곳 (딱 세 군데)
 
 1. `src/lib/data/places-seongsan.ts` — **임시 데이터**. 운영시간은 확인된 사실이 아니라
-   자리표시자이고 전부 `verified: false`입니다. 비짓제주 응답으로 교체하고
+   자리표시자이고 전부 `verified: false`입니다. **한국관광공사 TourAPI** 응답으로 교체하고
    `PLACEHOLDER_POLICY` 대신 `DEFAULT_POLICY`를 쓰세요.
+   비짓제주는 승인이 수일 걸려 못 받았고, 관광공사로 대체했습니다 (아래 '데이터 전략' 참고).
+   `scripts/apis.py` 에 `KorService2` 호출 함수는 **아직 없습니다** — 추가해야 합니다.
 2. ~~`src/lib/data/weather.ts`~~ — **완료.** 기상청 단기예보+특보 실시간 호출이 들어갔습니다.
    `DATA_GO_KR_KEY`만 `.env.local`에 넣으면 됩니다. `getWeather()`는 throw하지 않고
    실패 시 `isFallback: true`로 돌려줍니다. 실키로 한 번 확인한 뒤에 화면의
    '기상 임시 선택' 컨트롤을 제거하세요 (`isFallback`일 때는 남겨둬야 합니다).
-3. `src/lib/geo.ts`의 `estimateTravelMinutes` — 제주 실시간 교통정보로 보정.
-   이 함수만 바꾸면 필터와 일정 생성 양쪽에 반영됩니다.
-   스냅샷은 `npm run snapshot`으로 `src/lib/data/snapshots/jeju-traffic.json`에 받습니다.
+3. ~~`src/lib/geo.ts`의 `estimateTravelMinutes`~~ — **보류.** 제주 ITS 키를 못 받아
+   (승인 1~3일) 거리 기반 추정을 그대로 씁니다. 키가 나오면 이 함수만 바꾸면
+   필터와 일정 생성 양쪽에 반영됩니다.
 
 **F3가 기상을 쓰는 방법** — `getWeather()`가 주는 `risks: ('rain'|'wind'|'heat'|'sea')[]`만
 보면 됩니다. 원본 시계열이 필요하면 `hourly`, 특정 구간만 보려면 `withinHours()`.
 임계값은 `THRESHOLDS`에 모아 뒀으니 실데이터 보고 조정하세요.
-`latLonToGrid()`가 비짓제주 좌표를 기상청 격자로 바꿔 주므로 장소별 조회도 됩니다.
+`latLonToGrid()`가 관광공사 응답의 `mapy`/`mapx` 좌표를 기상청 격자로 바꿔 주므로
+장소별 조회도 됩니다.
 
 **탄소·저탄소 축은 이 프로젝트에서 제외했습니다.** `CO2_KG_PER_KM`, `estimatedCo2Kg`,
 `reduction`, `lowCarbon` 플랜은 코드에서 제거했습니다. 다시 추가하지 마세요.
@@ -157,13 +171,13 @@ npm run check:weather        # 기상청 발표시각·파싱·위험판정 asse
 npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
 npm run check:filter         # F3 4개 제약 + 발표 시나리오 재현 assert (키 불필요)
 npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
-npm run snapshot             # 비짓제주·교통 → src/lib/data/snapshots/*.json
+npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/*.json (아직 미수집)
 ```
 
 - 소스는 `src/` 아래, import alias는 `@/*`
 - 테스트 러너는 설치하지 않았습니다. 1박2일 안에서는 `npm run build`의 타입체크가 사실상
   유일한 자동 검증입니다. 화면을 띄워 직접 확인하세요.
-- 초기화 커밋 완료 (`chore: init Next.js app`). 원격 저장소는 아직 없습니다.
+- 원격은 `github.com/bodleim/planB-jeju`, 기본 브랜치 `main`.
 
 ### ⚠️ Next.js 16은 학습 데이터보다 최신입니다
 
@@ -175,12 +189,31 @@ npm run snapshot             # 비짓제주·교통 → src/lib/data/snapshots/*
 
 **API 키 승인 지연이나 응답 장애로 시연이 죽는 것을 막는 것이 최우선입니다.**
 
-| 데이터 | 처리 방식 | 용도 |
+### 확정 API 목록 (2026-07-27 발급 완료 기준)
+
+`DATA_GO_KR_KEY` **하나로 아래 5건이 전부 커버됩니다.** Decoding 키를 넣으세요.
+
+| API | 처리 방식 | 용도 |
 |---|---|---|
-| 비짓제주 관광정보 (data.go.kr/data/15076361) | **사전 수집 → JSON 고정** | 후보 장소, 운영정보 |
-| 제주 실시간 교통정보 (15093660) | **사전 수집 → JSON 고정** | 이동시간 보정 |
-| 기상청 단기예보 (15000099) | **실시간 호출** | 우천·강풍·폭염 필터 |
+| 기상청_단기예보 조회서비스 (15000099) | **실시간 호출** | 우천·강풍·폭염 필터 |
+| 기상청_기상특보 조회서비스 | **실시간 호출** | 강풍·풍랑 특보 → "같은 위험 후보 제거"의 근거 |
+| 한국관광공사_국문 관광정보 서비스_GW (15101578) | **사전 수집 → JSON 고정** | 후보 장소, 운영정보 |
+| 국토교통부_(TAGO)_버스정류소정보 | **사전 수집 → JSON 고정** | 도보권 정류소 |
+| 국토교통부_(TAGO)_버스도착정보 | 미사용 (차량 시연) | — |
 | 여객선 결항 | 공개 API 없음 → **사용자 입력** | 중단 원인 |
+
+**비짓제주는 못 받았습니다** (사용신청서 → 메일 회신, 수일 소요). 한국관광공사 TourAPI 로
+대체했고 자동승인이라 즉시 발급됩니다. 엔드포인트는 `apis.data.go.kr/B551011/KorService2/` —
+장소 목록은 `areaBasedList2`(`areaCode=39`) 또는 `locationBasedList2`(성산항 좌표 반경),
+운영시간·쉬는날은 `detailIntro2`. **오퍼레이션 이름 끝에 `2`가 붙은 것만 쓰세요** —
+`KorService1`은 폐기됐고 블로그 예제 대부분이 구버전입니다. 개발계정 1,000건/일이라
+성산권 30곳(목록 1회 + 상세 30회)이면 충분합니다.
+
+**제주 ITS 실시간교통(15093660)도 못 받았습니다** (담당자 승인 1~3일). `estimateTravelMinutes`
+의 거리 기반 추정을 그대로 씁니다. 심사 질의에는 "신청 완료, 승인 대기"로 답합니다.
+
+선택 키: `KAKAO_REST_KEY`(지오코딩), `NEXT_PUBLIC_KAKAO_JS_KEY`(지도),
+`ANTHROPIC_API_KEY`(설명 문구). 셋 다 없어도 시연은 돕니다. 발급 절차는 `.env.example` 주석에.
 
 - 스냅샷 JSON은 저장소에 커밋합니다. 수집 시각을 파일 안에 함께 기록하고 화면의
   '데이터 기준시각'에 그대로 씁니다 — 스냅샷이라고 숨기지 말고 기준시각을 표시하면 됩니다.
