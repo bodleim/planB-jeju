@@ -4,8 +4,9 @@ CLAUDE.md 데이터 전략: 이 둘은 앱에서 실시간 호출하지 않고 �
 키 승인 지연이나 응답 장애로 시연이 죽는 걸 막는 게 목적이다.
 수집 시각(fetchedAt)을 파일 안에 함께 남기고, 화면의 '데이터 기준시각' 에 그대로 쓴다.
 
-    python3 scripts/snapshot.py                # 키 있는 것만 수집
+    python3 scripts/snapshot.py                # 기본 항목 (앱이 쓰는 것) 수집
     python3 scripts/snapshot.py visitjeju      # 특정 항목만
+    python3 scripts/snapshot.py tour-jeju      # 제주 전역 — 명시해야 돈다 (호출 1,000건급)
 
 수집된 JSON 은 저장소에 커밋한다 (스냅샷이라고 숨기지 말고 기준시각을 표시하면 된다).
 """
@@ -96,7 +97,34 @@ def tour_jeju():
     return out
 
 
+# 성산·우도권만 받는다 — **앱이 실제로 쓰는 스냅샷이다** (MVP 스코프).
+# 목록은 유형별 1회씩(5회), 상세는 장소당 1회라 1회 수집에 약 135건 쓴다.
+SEONGSAN = (33.4744, 126.9319)
+SEONGSAN_RADIUS = 15000
+SEONGSAN_ROWS = {12: 40, 14: 15, 28: 15, 38: 15, 39: 45}
+
+
+def tour_seongsan():
+    """성산·우도권 후보 + 운영정보. 목록 항목에 detailIntro2 응답을 intro 로 붙여 돌려준다."""
+    out = []
+    for content_type, rows in SEONGSAN_ROWS.items():
+        listed = apis.tour_items(
+            apis.tour_nearby(*SEONGSAN, radius=SEONGSAN_RADIUS, content_type=content_type, rows=rows)
+        )
+        for item in listed:
+            try:
+                intro = apis.tour_items(apis.tour_intro(item["contentid"], content_type))
+            except Exception as e:  # noqa: BLE001 - 한 곳의 상세 실패가 수집 전체를 막지 않는다
+                print(f"      intro 실패 {item.get('title')}: {type(e).__name__}: {e}")
+                intro = []
+            out.append({**item, "intro": intro[0] if intro else None})
+        print(f"      {content_type} {apis.TOUR_TYPES[content_type]:<6} {len(listed)}곳")
+    return out
+
+
 SOURCES = {
+    # 앱이 읽는 스냅샷. 스코프를 넓히려면 아래 tour-jeju 를 받고 places.ts 의 import 를 바꾼다.
+    "tour-seongsan": ("DATA_GO_KR_KEY", "한국관광공사_국문 관광정보 서비스_GW (15101578)", tour_seongsan),
     "tour-jeju": ("DATA_GO_KR_KEY", "한국관광공사_국문 관광정보 서비스_GW (15101578) / areaBasedList2 + detailIntro2, areaCode 39", tour_jeju),
     # 비짓제주는 페이지네이션 — c1 관광지 위주로 몇 페이지만. 성산권 필터는 로더에서.
     "visitjeju": ("VISITJEJU_KEY", "비짓제주 관광정보", lambda: [apis.visitjeju(category="c1", page=p) for p in (1, 2, 3)]),
@@ -131,8 +159,13 @@ def collect(names):
     return fails
 
 
+# 인자 없이 돌릴 때의 기본 목록. tour-jeju 는 **일부러 뺐다** — 상세 호출이 장소당 1회라
+# 전역 수집은 1,000건급이고, 개발계정 일일 한도를 모르고 태우면 그날 시연 준비가 막힌다.
+DEFAULT_SOURCES = [n for n in SOURCES if n != "tour-jeju"]
+
+
 if __name__ == "__main__":
-    picked = sys.argv[1:] or list(SOURCES)
+    picked = sys.argv[1:] or DEFAULT_SOURCES
     unknown = [n for n in picked if n not in SOURCES]
     if unknown:
         sys.exit(f"알 수 없는 항목: {unknown}. 가능한 값: {list(SOURCES)}")

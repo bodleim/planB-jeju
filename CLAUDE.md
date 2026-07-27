@@ -24,9 +24,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | | 상태 | 검증 |
 |---|---|---|
-| 기상 데이터 | **완료** `src/lib/data/weather.ts` — 단기예보+특보 실시간, 실패 시 `isFallback` 폴백 | `npm run check:weather` |
+| 기상 데이터 | **단기예보만 완료** `src/lib/data/weather.ts` — 실시간 호출, 실패 시 `isFallback` 폴백. **기상특보는 403(응답 거부)** 이라 `warningsOk: false` 이고 판정에 안 들어갑니다 | `npm run check:weather` |
 | 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 `congestion` 인자로 대기 | (필터 체크에 포함) |
-| 스냅샷 수집 | **완료** `scripts/apis.py`(`tour_nearby`·`tour_intro`·`tour_common`·`tour_items`) + `scripts/snapshot.py` 의 `tour-seongsan` — 성산항 반경 15km, 유형 5종(관광지·문화시설·레포츠·쇼핑·음식점), 1회 목록 5 + 상세 130 = **135건** | `npm run check:api` (관광공사 2건 실키 OK) |
+| 스냅샷 수집 | **완료** `scripts/apis.py`(`tour_nearby`·`tour_area`·`tour_intro`·`tour_items`) + `scripts/snapshot.py`. 기본은 `tour-seongsan`(성산항 반경 15km, 유형 5종, 1회 약 **135건**). 전역 `tour-jeju`(1,016곳, 재개 가능)는 **명시해야 돕니다** — 기본에서 뺀 이유는 상세 호출이 장소당 1회라 1,000건급이기 때문입니다 | `npm run check:api` (관광공사 2건 실키 OK) |
 | 후보 장소 | **완료 — 실데이터** `src/lib/data/places.ts` + `snapshots/tour-seongsan.json`. 관광공사 TourAPI **103곳 수집 → 81곳 적재 → 그중 `verified: true` 72곳**. 세 숫자가 다릅니다 (바로 아래 설명) | `npm run check:places` |
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
 | F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
@@ -57,10 +57,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 임의의 지점으로 채우면 '지금 있는 곳 주변' 이라는 전제가 거짓이 됩니다.
 
 **남은 일**
-1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)는 HTTP 로 검증할 수 없어 아직 손으로
-   확인하지 않았습니다. 이전/다음 링크는 검증됐습니다.
-2. 배포.
-3. **판단이 필요한 것** — 아쿠아플라넷 제주가 후보에서 빠집니다 (TourAPI 가 휴무일을 비워
+1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)와 위치 권한 팝업은 HTTP 로 검증할 수
+   없어 아직 손으로 확인하지 않았습니다. 이전/다음 링크와 장소 검색은 검증됐습니다.
+2. 배포 (Vercel 에 `DATA_GO_KR_KEY` 만 넣으면 됩니다).
+3. **차량 없는 사용자의 버스 시간이 추정입니다.** TAGO 버스정류소 스냅샷을 안 받았고
+   `estimateTravelMinutes` 가 평균 18km/h + 정류장 접근 15분으로 계산합니다. 화면에 "버스
+   시간표가 아니라 추정" 이라고 밝히는 것까지만 해 뒀습니다. 실제 정류소 기반으로 올리려면
+   `tour-jeju` 처럼 스냅샷 소스를 하나 더 만들면 됩니다.
+4. **기상특보 키** — 승인되면 `warningsOk` 가 true 가 되고 화면 문구가 자동으로 바뀝니다.
+   코드는 고칠 게 없습니다.
+5. **판단이 필요한 것** — 아쿠아플라넷 제주가 후보에서 빠집니다 (TourAPI 가 휴무일을 비워
    둠). 도메인 규칙 4를 그대로 따른 결과이고 화면에 이유도 나오지만, 성산권 대표 실내
    명소라 발표에서 아쉬울 수 있습니다. 넣으려면 `places.ts` 의 `verified: closed !== null`
    한 줄을 고치면 되는데, 규칙을 굽히는 쪽이라 그대로 뒀습니다.
