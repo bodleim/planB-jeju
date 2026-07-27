@@ -6,6 +6,8 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // *.check.ts 는 node --experimental-strip-types 로 직접 돌린다 (경로 해석을 안 하므로 확장자 필수)
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

@@ -46,10 +46,18 @@ F2의 스와이프·새로고침, 그리고 실데이터 교체와 시연 준비
 1. `src/lib/data/places-seongsan.ts` — **임시 데이터**. 운영시간은 확인된 사실이 아니라
    자리표시자이고 전부 `verified: false`입니다. 비짓제주 응답으로 교체하고
    `PLACEHOLDER_POLICY` 대신 `DEFAULT_POLICY`를 쓰세요.
-2. `src/lib/data/weather.ts` — 기상청 단기예보 호출로 교체. 실패 시 폴백하고
-   `isFallback`을 유지한 뒤, 화면의 '기상 임시 선택' 컨트롤을 제거하세요.
+2. ~~`src/lib/data/weather.ts`~~ — **완료.** 기상청 단기예보+특보 실시간 호출이 들어갔습니다.
+   `DATA_GO_KR_KEY`만 `.env.local`에 넣으면 됩니다. `getWeather()`는 throw하지 않고
+   실패 시 `isFallback: true`로 돌려줍니다. 실키로 한 번 확인한 뒤에 화면의
+   '기상 임시 선택' 컨트롤을 제거하세요 (`isFallback`일 때는 남겨둬야 합니다).
 3. `src/lib/geo.ts`의 `estimateTravelMinutes` — 제주 실시간 교통정보로 보정.
    이 함수만 바꾸면 필터와 일정 생성 양쪽에 반영됩니다.
+   스냅샷은 `npm run snapshot`으로 `src/lib/data/snapshots/jeju-traffic.json`에 받습니다.
+
+**F3가 기상을 쓰는 방법** — `getWeather()`가 주는 `risks: ('rain'|'wind'|'heat'|'sea')[]`만
+보면 됩니다. 원본 시계열이 필요하면 `hourly`, 특정 구간만 보려면 `withinHours()`.
+임계값은 `THRESHOLDS`에 모아 뒀으니 실데이터 보고 조정하세요.
+`latLonToGrid()`가 비짓제주 좌표를 기상청 격자로 바꿔 주므로 장소별 조회도 됩니다.
 
 **탄소·저탄소 축은 이 프로젝트에서 제외했습니다.** `CO2_KG_PER_KM`, `estimatedCo2Kg`,
 `reduction`, `lowCarbon` 플랜은 코드에서 제거했습니다. 다시 추가하지 마세요.
@@ -128,6 +136,12 @@ npm run dev     # 개발 서버 (http://localhost:3000)
 npm run build   # 프로덕션 빌드 + 타입체크
 npm run start   # 빌드 결과 실행
 npm run lint    # ESLint
+
+cp .env.example .env.local   # 키 채우기 (런타임에 필수인 건 DATA_GO_KR_KEY 하나)
+npm run check:weather        # 기상청 발표시각·파싱·위험판정 assert (키 불필요)
+npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
+npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
+npm run snapshot             # 비짓제주·교통 → src/lib/data/snapshots/*.json
 ```
 
 - 소스는 `src/` 아래, import alias는 `@/*`
