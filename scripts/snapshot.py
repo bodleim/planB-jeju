@@ -20,7 +20,34 @@ OUT = os.path.join(apis.ROOT, "src", "lib", "data", "snapshots")
 
 # ponytail: 응답을 원형 그대로 저장한다. 실제 스키마를 확인하기 전에 파서를 쓰면
 #           틀린 파서가 남는다. 성산권 필터·필드 정규화는 TS 로더에서 처리할 것.
+
+# 성산항 기준 반경(m)과 유형별 수집 개수. 개발계정 1,000건/일이라
+# 목록 5회 + 상세 = 아래 합계만큼 쓴다. 넉넉히 늘리기 전에 잔여 호출을 확인할 것.
+SEONGSAN = (33.4744, 126.9319)
+TOUR_RADIUS = 15000
+TOUR_ROWS = {12: 40, 14: 15, 28: 15, 38: 15, 39: 45}
+
+
+def tour_seongsan():
+    """성산권 후보 + 유형별 운영정보. 목록 항목에 detailIntro2 응답을 intro 로 붙여 돌려준다."""
+    out = []
+    for content_type, rows in TOUR_ROWS.items():
+        listed = apis.tour_items(
+            apis.tour_nearby(*SEONGSAN, radius=TOUR_RADIUS, content_type=content_type, rows=rows)
+        )
+        for item in listed:
+            try:
+                intro = apis.tour_items(apis.tour_intro(item["contentid"], content_type))
+            except Exception as e:  # noqa: BLE001 - 한 곳의 상세 실패가 수집 전체를 막지 않는다
+                print(f"      intro 실패 {item.get('title')}: {type(e).__name__}: {e}")
+                intro = []
+            out.append({**item, "intro": intro[0] if intro else None})
+        print(f"      {content_type} {apis.TOUR_TYPES[content_type]:<6} {len(listed)}곳")
+    return out
+
+
 SOURCES = {
+    "tour-seongsan": ("DATA_GO_KR_KEY", "한국관광공사_국문 관광정보 서비스_GW (15101578)", tour_seongsan),
     # 비짓제주는 페이지네이션 — c1 관광지 위주로 몇 페이지만. 성산권 필터는 로더에서.
     "visitjeju": ("VISITJEJU_KEY", "비짓제주 관광정보", lambda: [apis.visitjeju(category="c1", page=p) for p in (1, 2, 3)]),
     "jeju-traffic": ("JEJU_ITS_KEY", "제주 ITS 실시간 교통정보", apis.jeju_traffic),

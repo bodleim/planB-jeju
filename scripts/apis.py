@@ -76,6 +76,46 @@ def visitjeju(category=None, page=1, locale="kr"):
     )
 
 
+# 비짓제주 대체. 오퍼레이션 이름 끝의 `2` 를 빼면 폐기된 KorService1 이라 404 다.
+TOUR = "https://apis.data.go.kr/B551011/KorService2"
+
+# contentTypeId — 후보로 쓸 것만. 32 숙박·15 행사는 대체 일정 대상이 아니라 제외.
+TOUR_TYPES = {12: "관광지", 14: "문화시설", 28: "레포츠", 38: "쇼핑", 39: "음식점"}
+
+
+def _tour(op, **params):
+    return _get(f"{TOUR}/{op}", serviceKey=_key("DATA_GO_KR_KEY"),
+                MobileOS="ETC", MobileApp="planbjeju", _type="json", **params)
+
+
+def tour_nearby(lat=33.4744, lon=126.9319, radius=15000, content_type=None, rows=50, page=1):
+    """반경 내 관광 후보 (locationBasedList2). 기본 좌표 = 성산항, arrange=E 는 거리순."""
+    return _tour("locationBasedList2", mapX=lon, mapY=lat, radius=radius,
+                 contentTypeId=content_type, arrange="E", numOfRows=rows, pageNo=page)
+
+
+def tour_intro(content_id, content_type):
+    """운영시간·휴무일 (detailIntro2). 필드명이 contentTypeId 별로 다르다 —
+    12 usetime/restdate, 39 opentimefood/restdatefood, 14 usetimeculture/restdateculture,
+    28 usetimeleisure/restdateleisure, 38 opentime/restdateshopping."""
+    return _tour("detailIntro2", contentId=content_id, contentTypeId=content_type)
+
+
+def tour_common(content_id):
+    """개요·홈페이지·전화 (detailCommon2). 화면의 '확인 필요' 링크에 쓴다."""
+    return _tour("detailCommon2", contentId=content_id)
+
+
+def tour_items(response):
+    """공공데이터 공통 껍데기를 벗긴다. 0건이면 items 가 dict 아닌 빈 문자열로 온다."""
+    body = response.get("response", {}).get("body", {})
+    items = body.get("items") or {}
+    if not isinstance(items, dict):
+        return []
+    item = items.get("item") or []
+    return item if isinstance(item, list) else [item]
+
+
 # ---------------------------------------------------------------- 3. 날씨 (후보 필터: 강수·강풍·폭염)
 KMA = "http://apis.data.go.kr/1360000"
 
@@ -202,6 +242,8 @@ CHECKS = [
     ("제주 ITS 실시간교통", "JEJU_ITS_KEY", jeju_traffic),
     ("제주 ITS 돌발상황", "JEJU_ITS_KEY", jeju_road_events),
     ("비짓제주 관광정보", "VISITJEJU_KEY", lambda: visitjeju(category="c1")),
+    ("관광공사 후보목록", "DATA_GO_KR_KEY", lambda: tour_nearby(rows=1)),
+    ("관광공사 운영정보", "DATA_GO_KR_KEY", lambda: tour_intro("2800664", 12)),
     ("기상청 단기예보", "DATA_GO_KR_KEY", kma_forecast),
     ("기상청 기상특보", "DATA_GO_KR_KEY", kma_warnings),
     ("버스 주변정류소", "DATA_GO_KR_KEY", lambda: bus_stops_nearby(33.4996, 126.5312)),

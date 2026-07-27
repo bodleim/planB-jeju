@@ -241,10 +241,19 @@ export function generatePlan(
 
     scored.sort((a, b) => b.score.total - a.score.total);
 
+    // F2 스와이프가 이 시간대를 고정했으면 그 장소를 쓴다. 단 위 루프를 통과한
+    // 후보 안에서만 찾는다 — 고정으로 제약을 우회할 수는 없다 (문 닫은 곳이 들어오면
+    // F1의 완료 기준이 깨진다). 못 찾으면 점수로 고르고 이유를 notes에 남긴다.
+    const pinnedId = input.pins?.[slots.length];
+    const pinnedIndex = pinnedId === undefined ? -1 : scored.findIndex((e) => e.visit.place.id === pinnedId);
+    if (pinnedId !== undefined && pinnedIndex < 0) {
+      notes.push(`선택한 대안을 이 시간대에 넣을 수 없어 다른 곳으로 채웠습니다 (영업시간·남은 시간 제약).`);
+    }
+
     // 상위 몇 개 중에서 seed로 고른다. 항상 최고점만 뽑으면 새로고침해도 같은 계획이 나온다.
     const explorationSize = Math.min(policy.explorationPoolSize, scored.length);
     const weights = scored.slice(0, explorationSize).map((entry) => entry.score.total ** 4);
-    const pickedIndex = pickIndex(rng, weights);
+    const pickedIndex = pinnedIndex >= 0 ? pinnedIndex : pickIndex(rng, weights);
     const chosen = scored[pickedIndex];
     const alternatives = scored
       .filter((_, index) => index !== pickedIndex)
@@ -252,7 +261,8 @@ export function generatePlan(
 
     // 남은 시간 끝에 남는 짧은 창에는 들어갈 후보가 하나뿐인 경우가 많다.
     // 그런 시간대를 편성하면 스와이프할 대안이 없으므로, 채우지 않고 남겨 둔다.
-    if (slots.length > 0 && alternatives.length < policy.minAlternativesPerSlot) break;
+    // 사용자가 직접 고른(고정한) 시간대는 예외다 — 대안이 없다고 빼면 선택이 사라진다.
+    if (slots.length > 0 && pinnedIndex < 0 && alternatives.length < policy.minAlternativesPerSlot) break;
 
     slots.push({ index: slots.length, chosen, alternatives });
     usedIds.add(chosen.visit.place.id);

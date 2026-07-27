@@ -1,18 +1,18 @@
 /**
- * F3 필터 + F1 파이프라인 검증. 키 없이 돈다 — `npm run check:filter`
+ * F3 필터 검증 — 제약 하나하나를 합성 후보로 찔러 본다. 키 없이 돈다. `npm run check:filter`
  *
- * 마지막 두 블록이 발표 시나리오(성산항 여객선 결항)를 그대로 재현한다.
- * F3 → F1 을 이어서 돌려 '통과한 후보로 만든 계획이 불변식을 지키는지'까지 본다.
- * 이 assert 가 깨지면 시연이 깨진 것이다.
+ * 여기는 **제약 단위** 검증이다. 합성 후보를 써서 '이 조건이면 이 이유로 빠진다' 만 본다.
+ * 실데이터로 발표 시나리오를 끝까지 돌리는 건 `npm run check:plan` 이 한다 — 갈라 둔 이유는
+ * 여기서 실데이터 장소 id 를 박아 두면 스냅샷을 다시 받을 때마다 깨지기 때문이다.
  */
 import assert from 'node:assert/strict'
 import type { Weather } from '../data/weather.ts'
-import { ORIGINS, SEONGSAN_PLACES } from '../data/places-seongsan.ts'
+import { ORIGINS, SEONGSAN_PLACES } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { alwaysOpen, weeklyHours } from '../hours.ts'
-import { DEFAULT_POLICY, PLACEHOLDER_POLICY, generatePlan, isSingleCategory } from '../plan/index.ts'
+import { DEFAULT_POLICY, PLACEHOLDER_POLICY } from '../plan/index.ts'
 import { formatHm, jejuClock, parseHm } from '../time.ts'
-import type { Place, TripCategory } from '../types.ts'
+import type { Place } from '../types.ts'
 import {
   EXPOSURE_RISKS,
   activeRisks,
@@ -98,7 +98,14 @@ assert.equal(only(indoorNearby).candidates.length, 1, '실내·근거리·영업
 // 결항: 끊긴 교통편에 의존하는 후보
 const ferryPlace: Place = { ...indoorNearby, id: 't-ferry', dependsOn: 'ferry' }
 assert.equal(reasonOf(ferryPlace), 'cancelled')
-assert.equal(only(ferryPlace, { cause: 'rain' }).candidates.length, 1, '비 때문이면 배는 상관없다')
+// 결항이 아니어도 배를 타야 하는 곳은 제외한다 — 이동시간 추정이 배편을 모른다.
+// 성산항 좌표에서 판정하므로 우도 권역 밖이다.
+assert.equal(reasonOf(ferryPlace, { cause: 'rain' }), 'needsTransfer', '비 때문이어도 배는 못 탄다')
+assert.equal(
+  only(ferryPlace, { cause: 'rain', origin: { lat: 33.505, lng: 126.952 } }).candidates.length,
+  1,
+  '이미 우도 안에 있으면 우도 후보를 쓸 수 있다',
+)
 
 // 기상: 같은 위험
 const coastal: Place = { ...indoorNearby, id: 't-sea', exposure: 'coastal' }
@@ -128,91 +135,36 @@ const far: Place = { ...indoorNearby, id: 't-far', coord: { lat: 33.24, lng: 126
 assert.equal(reasonOf(far, { remainingMinutes: 60 }), 'tooFar', '남은 시간에 비해 이동 과다')
 assert.equal(reasonOf(far, { hasCar: false }), 'tooFar', '차 없이 대중교통으로도 과다')
 
-// ------------------------------------------------------------------ 발표 시나리오: F3
+// ------------------------------------------------------------------ 실데이터 연결 확인
 
-const demo = filterCandidates(SEONGSAN_PLACES, base)
-const kept = new Set(demo.candidates.map((p) => p.id))
-const cut = new Map(demo.rejected.map((r) => [r.place.id, r.reason]))
-
-assert.deepEqual(demo.risks.sort(), ['sea', 'wind'], '기상 키 없이도 원인으로 위험 확정')
-assert.equal(cut.get('udo-seobin-baeksa'), 'cancelled', '우도 — 배가 끊겼다')
-for (const id of ['seopjikoji', 'gwangchigi-beach', 'pyoseon-beach', 'seongsan-ilchulbong', 'honinji']) {
-  assert.equal(cut.get(id), 'hazard', `${id} — 강풍·해상 위험이 같아 제외돼야 한다`)
-}
-for (const id of ['aquaplanet-jeju', 'kimyounggap-gallery', 'seongsanpo-fish-market']) {
-  assert.ok(kept.has(id), `${id} — 실내·차양 후보는 남아야 한다`)
-}
-assert.ok(kept.size >= 5, `후보가 5곳 이상 남아야 F1 이 계획을 만들 수 있다: ${kept.size}`)
-assert.equal(kept.size + demo.rejected.length, SEONGSAN_PLACES.length, '모든 장소가 통과 또는 제외로 분류된다')
-
-// 통과한 후보는 전부 불변식을 만족한다
-for (const place of demo.candidates) {
-  assert.equal(
-    EXPOSURE_RISKS[place.exposure].filter((h) => demo.risks.includes(h)).length,
-    0,
-    `${place.name}: 같은 위험 잔존`,
-  )
-  assert.notEqual(place.dependsOn, 'ferry', `${place.name}: 끊긴 여객선에 의존`)
-}
-
-// 실데이터가 오면 DEFAULT_POLICY 로 돌아가야 한다 — 지금은 전부 미확인이라 후보가 0곳이다
-const strict = filterCandidates(SEONGSAN_PLACES, { ...base, policy: DEFAULT_POLICY })
-assert.ok(strict.candidates.length < demo.candidates.length, 'DEFAULT_POLICY 는 미확인 장소를 걷어낸다')
+// 스냅샷을 다시 받아도 깨지지 않을 성질만 본다 (개별 장소 id 는 check:plan 쪽에서도 안 박는다).
+// 실데이터에는 운영정보가 확인된 장소가 있으므로 여기서는 DEFAULT_POLICY 를 쓴다
+// (위 개별 제약 블록은 미확인 허용 동작을 보려고 PLACEHOLDER_POLICY 를 쓴다).
+const real = filterCandidates(SEONGSAN_PLACES, { ...base, policy: DEFAULT_POLICY })
+assert.ok(real.candidates.length > 0, '실데이터로 후보가 하나도 안 남았다')
+assert.equal(
+  real.candidates.length + real.rejected.length,
+  SEONGSAN_PLACES.length,
+  '모든 장소가 통과 또는 제외로 분류된다',
+)
 assert.ok(
-  strict.rejected.every((r) => r.reason !== 'unverified' || !r.place.verified),
-  'unverified 로 걸린 건 실제로 미확인인 장소뿐',
+  real.candidates.every((p) => p.verified),
+  'DEFAULT_POLICY 인데 운영 미확인 장소가 후보에 남았다',
+)
+assert.ok(
+  real.candidates.every((p) => p.dependsOn !== 'ferry'),
+  '여객선 결항인데 배로만 가는 후보가 남았다',
+)
+assert.ok(
+  real.candidates.every((p) => EXPOSURE_RISKS[p.exposure].every((h) => !real.risks.includes(h))),
+  '같은 기상 위험을 가진 후보가 남았다',
+)
+assert.ok(
+  real.rejected.every((r) => r.detail.length > 0),
+  '제외 이유 문구가 빈 항목이 있다 — 화면이 왜 빠졌는지 설명할 수 없다',
 )
 
-// ------------------------------------------------------------------ 발표 시나리오: F3 → F1
-
-const category: TripCategory = { companion: 'couple', activity: 'indoor' }
-const plan = generatePlan(
-  {
-    origin: SEONGSAN_PORT,
-    startMinutes: base.startMinutes,
-    remainingMinutes: base.remainingMinutes,
-    category,
-    hasCar: true,
-    weekday: MONDAY,
-    seed: 7,
-  },
-  demo.candidates,
-  PLACEHOLDER_POLICY,
-).plan
-
-assert.ok(plan !== null, `F3 후보로 계획이 나와야 한다: ${JSON.stringify(demo.candidates.map((p) => p.id))}`)
-assert.ok(plan.slots.length >= 2, `시간대가 2개 이상: ${plan.slots.length}`)
-assert.ok(isSingleCategory(plan), '일정 전체가 한 카테고리 조합을 따른다')
-assert.ok(plan.totals.endMinutes <= base.startMinutes + base.remainingMinutes, '남은 시간 안에 완주')
-for (const slot of plan.slots) {
-  const { visit } = slot.chosen
-  const open = visit.place.hours[MONDAY]
-  assert.ok(
-    open.some((i) => visit.startMinutes >= i.open && visit.startMinutes < i.close),
-    `${visit.place.name}: 도착 시각(${formatHm(visit.startMinutes)})에 열려 있지 않다`,
-  )
-  assert.equal(
-    EXPOSURE_RISKS[visit.place.exposure].filter((h) => demo.risks.includes(h)).length,
-    0,
-    `${visit.place.name}: F3 가 걸러야 할 위험이 계획에 들어왔다`,
-  )
-  assert.ok(slot.alternatives.length >= 1, `${visit.place.name}: 스와이프할 대안이 없다`)
-}
-// 새로고침(seed 변경)은 다른 조합을 준다
-const setKey = (p: NonNullable<typeof plan>) => p.slots.map((s) => s.chosen.visit.place.id).join('>')
-const seeds = new Set(
-  [1, 2, 3, 4, 5].map((seed) => {
-    const p = generatePlan(
-      { origin: SEONGSAN_PORT, startMinutes: base.startMinutes, remainingMinutes: base.remainingMinutes, category, hasCar: true, weekday: MONDAY, seed },
-      demo.candidates,
-      PLACEHOLDER_POLICY,
-    ).plan
-    return p ? setKey(p) : 'null'
-  }),
-)
-assert.ok(seeds.size >= 2, `새로고침마다 조합이 달라져야 한다: ${JSON.stringify([...seeds])}`)
-
-// 진입점 — 기상 API 를 붙여도 (키가 없어 폴백이어도) 후보가 나온다
+// 진입점 — 기상 API 가 폴백이어도 후보는 나와야 한다 (시연 중 네트워크 단절 대비)
 const live = await findCandidates({
   origin: SEONGSAN_PORT,
   remainingMinutes: 300,
@@ -221,26 +173,15 @@ const live = await findCandidates({
   startMinutes: base.startMinutes,
   weekday: MONDAY,
 })
-assert.ok(live.candidates.length > 0, '기상 폴백이어도 후보는 나와야 한다 (시연 중 네트워크 단절 대비)')
+assert.ok(live.candidates.length > 0, '진입점에서 후보가 안 나온다')
 assert.ok(live.risks.includes('sea'), '폴백이어도 결항 원인으로 해상 위험은 확정된다')
-assert.ok(live.rejected.some((r) => r.place.dependsOn === 'ferry'), '진입점에서도 우도는 제외된다')
 
-// ------------------------------------------------------------------ 출력
-
-console.log(`F3 필터 검증 ok — 후보 ${demo.candidates.length}곳 / 제외 ${demo.rejected.length}곳 (엄격 정책: ${strict.candidates.length}곳)`)
-console.log(`  진입점 findCandidates: 후보 ${live.candidates.length}곳, 기상 ${live.weatherFallback ? '폴백(확인 필요)' : '실시간'}, 위험 ${JSON.stringify(live.risks)}`)
-for (const place of demo.candidates) {
-  const km = Math.round(haversineKm(SEONGSAN_PORT, place.coord) * 10) / 10
-  console.log(`  후보  ${place.name.padEnd(16)} ${place.exposure.padEnd(8)} ${String(km).padStart(5)}km`)
-}
-for (const r of demo.rejected) {
-  console.log(`  제외  ${r.place.name.padEnd(16)} ${r.detail}`)
-}
-console.log(`F1 계획 검증 ok — ${plan.slots.length}개 시간대, ${formatHm(plan.totals.startMinutes)}~${formatHm(plan.totals.endMinutes)}, 조합 ${seeds.size}종`)
-for (const slot of plan.slots) {
-  const { visit } = slot.chosen
-  console.log(
-    `  ${formatHm(visit.startMinutes)}~${formatHm(visit.endMinutes)}  ${visit.place.name.padEnd(16)}` +
-      ` 이동 ${String(visit.travelMinutes).padStart(3)}분  대안 ${slot.alternatives.length}개`,
-  )
-}
+const counts = new Map<string, number>()
+for (const r of real.rejected) counts.set(r.reason, (counts.get(r.reason) ?? 0) + 1)
+console.log(
+  `F3 필터 검증 ok — 제약 단위 assert 통과, 실데이터 후보 ${real.candidates.length}곳 / 제외 ${real.rejected.length}곳`,
+)
+console.log(`  제외 이유별: ${[...counts].map(([k, v]) => `${k} ${v}`).join(' / ')}`)
+console.log(
+  `  진입점 findCandidates: 후보 ${live.candidates.length}곳, 기상 ${live.weatherFallback ? '폴백(확인 필요)' : '실시간'}, 위험 ${JSON.stringify(live.risks)}`,
+)

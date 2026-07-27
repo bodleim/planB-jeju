@@ -10,9 +10,9 @@
  * 여기서 추가로 보는 건 F1 이 모르는 두 가지 — 기상 위험과 끊긴 교통편이다.
  */
 import { getWeather, type Weather, type WeatherRisk } from '../data/weather.ts'
-import { SEONGSAN_PLACES } from '../data/places-seongsan.ts'
+import { FERRY_BOUNDS, SEONGSAN_PLACES } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
-import { PLACEHOLDER_POLICY, tryVisit, type VisitContext } from '../plan/generate.ts'
+import { DEFAULT_POLICY, tryVisit, type VisitContext } from '../plan/generate.ts'
 import type { PlanPolicy, RejectReason as PlanRejectReason } from '../plan/types.ts'
 import { formatHm, jejuClock } from '../time.ts'
 import type {
@@ -56,7 +56,9 @@ export const EXPOSURE_RISKS: Record<Exposure, WeatherRisk[]> = {
   covered: ['heat'],
   outdoor: ['rain', 'wind', 'heat'],
   coastal: ['rain', 'wind', 'heat', 'sea'],
-  marine: ['wind', 'sea'],
+  // 유람선·여객터미널. 비도 위험으로 본다 — 우천에 유람선을 대안으로 내놓으면
+  // '일정을 깨뜨린 것과 같은 위험은 피한다' 는 이 서비스의 약속이 무너진다.
+  marine: ['rain', 'wind', 'sea'],
 }
 
 export type FilterContext = {
@@ -73,7 +75,7 @@ export type FilterContext = {
   policy: PlanPolicy
 }
 
-export type RejectReason = 'hazard' | 'cancelled' | 'tooFar' | PlanRejectReason
+export type RejectReason = 'hazard' | 'cancelled' | 'needsTransfer' | 'tooFar' | PlanRejectReason
 
 export type Rejection = {
   place: Place
@@ -90,6 +92,14 @@ export type FilterResult = {
   risks: WeatherRisk[]
   /** 기상 정보가 폴백이었는지 — 화면에 '확인 필요' 를 띄우는 근거 */
   weatherFallback: boolean
+}
+
+/** 좌표가 사각 범위 안인지. 여객선으로만 가는 권역(우도) 판정에 쓴다. */
+function inBounds(
+  at: LatLng,
+  b: { minLat: number; maxLat: number; minLng: number; maxLng: number },
+): boolean {
+  return at.lat >= b.minLat && at.lat <= b.maxLat && at.lng >= b.minLng && at.lng <= b.maxLng
 }
 
 /** 기상 API 의 위험 + 중단 원인이 함의하는 위험. */
@@ -127,10 +137,23 @@ export function filterCandidates(places: readonly Place[], ctx: FilterContext): 
   const reject = (place: Place, reason: RejectReason, detail: string) =>
     rejected.push({ place, reason, detail })
 
+  const onIsland = FERRY_BOUNDS !== null && inBounds(origin, FERRY_BOUNDS)
+
   for (const place of places) {
     // 1. 결항 — 끊긴 교통편에 의존하는 후보
     if (blocked && place.dependsOn === blocked) {
       reject(place, 'cancelled', `${blocked === 'ferry' ? '여객선' : '항공편'} 운항 중단으로 접근 불가`)
+      continue
+    }
+
+    // 1-2. 결항이 아니어도, 배·비행기를 타야 하는 곳은 지금 그 섬에 있지 않으면 제외한다.
+    //
+    // `estimateTravelMinutes` 는 육로 거리 기반이라 배편 시간표·대기시간을 모른다. 그대로
+    // 두면 성산항에서 우도 후보까지 '차로 10분' 으로 계산해서 실행 불가능한 일정이 나온다.
+    // 앱이 없는 정보를 있는 척하지 않는다 (CLAUDE.md: 앱이 안전판단을 대신하지 않는다).
+    if (place.dependsOn !== undefined && !(place.dependsOn === 'ferry' && onIsland)) {
+      const vehicle = place.dependsOn === 'ferry' ? '배' : '항공편'
+      reject(place, 'needsTransfer', `${vehicle}를 타야 하는 곳 — 배편 시간을 반영할 수 없어 제외`)
       continue
     }
 
@@ -177,7 +200,7 @@ export async function findCandidates(input: {
   /** 기준 시각. 생략하면 제주 현재 시각 */
   startMinutes?: MinuteOfDay
   weekday?: Weekday
-  /** 후보가 전부 임시 데이터라 기본값이 PLACEHOLDER_POLICY 다. 실데이터로 교체하면 DEFAULT_POLICY */
+  /** 기본값은 DEFAULT_POLICY — 운영정보 미확인 장소를 자동 편성에서 뺀다 (도메인 규칙 4). */
   policy?: PlanPolicy
   places?: readonly Place[]
 }): Promise<FilterResult> {
@@ -191,7 +214,7 @@ export async function findCandidates(input: {
     hasCar: input.hasCar,
     cause: input.cause,
     weather,
-    policy: input.policy ?? PLACEHOLDER_POLICY,
+    policy: input.policy ?? DEFAULT_POLICY,
   })
 }
 

@@ -26,17 +26,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | 기상 데이터 | **완료** `src/lib/data/weather.ts` — 단기예보+특보 실시간, 실패 시 `isFallback` 폴백 | `npm run check:weather` |
 | 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 `congestion` 인자로 대기 | (필터 체크에 포함) |
-| F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 4개 제약 + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
-| F1 계획 생성 | **완료** `src/lib/plan/` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:filter` |
-| 후보 장소 | ⚠️ **임시 데이터** `src/lib/data/places-seongsan.ts` — 성산권 20곳, 전부 `verified: false` | — |
-| F2 대안 교체 | ❌ **미구현.** 재고(`PlanSlot.alternatives`)는 있고 화면·교체 로직이 없습니다 | — |
-| 시연 화면 | ❌ **미구현.** `/`는 Hello world, `/dev/filter`·`/dev/plan` 없음 | — |
+| 후보 장소 | **완료 — 실데이터** `src/lib/data/places.ts` + `snapshots/tour-seongsan.json` (관광공사 TourAPI 103곳 수집 → 운영정보 확인된 81곳 적재) | `npm run check:places` |
+| F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 제약 + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
+| F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
+| F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
+| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | 브라우저로 확인 |
 
-지금 눈으로 확인할 수 있는 건 `npm run check:filter` 콘솔 출력뿐입니다. 발표 시나리오
-(성산항 결항 / 5시간 / 차량)를 F3 → F1 으로 이어 돌려 후보 11곳·제외 9곳과 제외 이유,
-그리고 거기서 만든 3개 시간대 계획을 출력합니다.
+`npm run dev` 후 아래 리허설 URL 을 열면 발표 흐름이 그대로 나옵니다.
 
-**남은 일** — F2 화면·스와이프 → 실데이터 교체 → 시연 준비.
+```
+/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00
+  &companion=couple&activity=indoor&checkin=16:00
+```
+
+**남은 일** — 리허설(실제 브라우저에서 스와이프 손으로 확인) → 배포. 스냅샷을 다시 받으려면
+`npm run snapshot` (관광공사 개발계정 1,000건/일, 1회 수집에 약 135건 씁니다).
 
 ### F3 → F1 파이프라인 (이 두 개가 어떻게 붙어 있는지)
 
@@ -44,10 +48,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 src/lib/types.ts                 Place, TripCategory, Cause, 영업시간·노출도 타입
 src/lib/filter/index.ts          F3. findCandidates() → { candidates: Place[], rejected, risks }
 src/lib/plan/generate.ts         F1. generatePlan(input, candidates, policy), tryVisit
+src/lib/plan/replace.ts          F2. buildPlan / swapPins / swapSlot / reshuffle
 src/lib/plan/score.ts            점수식과 카테고리 적합도 계산
 src/lib/plan/types.ts            PlanInput, Plan, PlanSlot, PlanPolicy, 탈락 이유
-src/lib/data/places-seongsan.ts  성산권 임시 후보 20곳 + ORIGINS (전부 verified: false)
+src/lib/data/places.ts           TourAPI 스냅샷 → Place[] + ORIGINS + FERRY_BOUNDS
+src/lib/data/tour-hours.ts       usetime/restdate 자유 텍스트 → WeeklyHours (정규식만)
 src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제주 시각, 시드 난수
+src/app/page.tsx                 시연 화면 (서버 렌더링 + GET). SwipeSlot.tsx 만 클라이언트
 ```
 
 - **F3가 `Place[]`를 걸러 `Place[]`를 주고, F1이 그걸 인자로 받습니다.** 화면은
@@ -62,23 +69,27 @@ src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제�
 - **`PlanInput.blockedTransport`는 이제 F3가 담당합니다.** F1 단독 사용을 위해 남겨 뒀지만,
   `findCandidates()`를 거치면 이미 걸러져 있습니다.
 - **`PlanPolicy` 하나가 F1·F3 공용입니다.** `maxTravelShare`가 F3 전용 노브입니다.
-  임시 데이터를 쓰는 동안은 `PLACEHOLDER_POLICY`(=`findCandidates()` 기본값), 실데이터로
-  바꾸면 `DEFAULT_POLICY`.
+  `findCandidates()` 기본값은 `DEFAULT_POLICY`이고, 운영정보 미확인 장소는 여기서 빠집니다.
+  `PLACEHOLDER_POLICY`(미확인 허용)는 이제 테스트에서만 씁니다.
+- **F2는 `pins` 하나로 표현됩니다.** `plan/replace.ts`가 '앞 시간대는 현재 채택안으로 고정,
+  교체할 칸은 고른 대안으로 고정, 그 뒤는 다시 생성'을 `generatePlan()` 재호출로 처리합니다.
+  제약 검사가 한 곳에만 있으니 대안이라는 이유로 문 닫은 곳이 끼어들 수 없습니다.
 
-### 만들 때 지킬 것 (아직 코드가 없는 부분의 설계 결정)
+### 화면·F2 설계 결정 (구현되어 있음 — 바꿀 때 이유를 알고 바꾸세요)
 
-- `/` 시연 화면은 **서버 렌더링 + GET 폼**으로 만드세요. 클라이언트 JS에 의존하지 않으면
-  무대에서 네트워크가 흔들려도 화면은 뜹니다.
-- 시연 URL을 쿼리로 고정할 수 있게 만들고 리허설에는 그걸 북마크하세요. 목표하는 형태:
-  `/?go=1&cause=ferry_cancelled&lat=33.474&lng=126.932&remaining=300&companion=couple&activity=indoor&car=yes&checkin=16:00&at=10:00`
-  `at`을 받아야 합니다 — 비우면 실제 현재 시각이라 새벽에 열면 후보 0곳이 됩니다.
-  위치는 브라우저 감지가 기본이고, 거부되거나 제주 밖이면 `ORIGINS`로 폴백합니다
-  (`parseJejuCoord`).
-- `/dev/filter`, `/dev/plan` — 확인용 개발 페이지. 시연 화면이 아닙니다.
-- **F2 재고는 이미 있습니다.** 각 `PlanSlot`에 채택안(`chosen`)과 같은 조건에서 검증된
-  대안(`alternatives`)이 들어 있습니다. 새로고침은 `PlanInput.seed`만 바꾸면 됩니다.
-  단 대안으로 교체하면 뒤 시간대의 출발 시각이 밀리므로 그 뒤를 다시 채워야 합니다 —
-  이 재계산 함수는 아직 없습니다.
+- `/` 시연 화면은 **서버 렌더링 + GET 폼/링크**입니다. 상태가 전부 쿼리스트링에 있어서
+  무대에서 JS가 죽어도 스와이프 대신 이전/다음 링크로 동작합니다. `SwipeSlot.tsx`만
+  클라이언트이고, 하는 일은 그 링크로 이동하는 것뿐입니다.
+- 리허설 URL을 북마크하세요:
+  `/?go=1&cause=ferry_cancelled&origin=seongsan_port&remaining=300&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00`
+  `at`을 비우면 실제 현재 시각입니다 — 새벽에 열면 후보 0곳이 됩니다.
+  위치는 `lat`/`lng`가 있으면 그걸 쓰고, 없거나 제주 밖이면 `ORIGINS`로 폴백합니다.
+- `pins`는 **장소 id**를 담습니다. '2번째 대안' 같은 인덱스로 저장하면 출발 시각이 바뀔 때
+  링크가 가리키는 곳이 달라집니다.
+- 스와이프 순회 순서는 **점수 내림차순, 동점은 id**로 고정합니다. 채택안을 맨 앞에 두면
+  한 칸 넘긴 뒤 되돌아와 두 곳만 왕복합니다 (동점이 흔해서 점수만으로는 부족합니다).
+- `/dev/filter`, `/dev/plan`은 **만들지 않았습니다.** `check:filter`·`check:plan` 콘솔
+  출력이 같은 역할을 하고, 화면이 하나면 무대에서 잘못 열 일이 없습니다.
 - **F1·F2가 지킬 불변식** — 이걸 깨는 변경은 되돌리세요.
   - 모든 방문지는 **도착 시각에** 실제로 열려 있다 (`tryVisit`이 보장. 별도 판정을
     만들면 이 불변식이 깨집니다)
@@ -89,13 +100,13 @@ src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제�
 
 ### API 키가 나오면 갈아끼울 곳 (딱 세 군데)
 
-1. `src/lib/data/places-seongsan.ts` — **임시 데이터**. 운영시간·요금·좌표는 확인된 사실이
-   아니라 자리표시자이고 전부 `verified: false`입니다. **한국관광공사 TourAPI** 응답으로
-   교체하고 `PLACEHOLDER_POLICY` 대신 `DEFAULT_POLICY`를 쓰세요. 그러면 미확인 장소는
-   자동으로 편성에서 빠집니다 (지금 `DEFAULT_POLICY`로 돌리면 후보 0곳이 나옵니다 — 정상).
-   비짓제주는 승인이 수일 걸려 못 받았고, 관광공사로 대체했습니다 (아래 '데이터 전략' 참고).
-   `scripts/apis.py` 에 `KorService2` 호출 함수는 **아직 없습니다** — 추가해야 합니다.
-   교체 시 **`exposure`부터 확인하세요** — 이 값이 틀리면 기상 필터가 그대로 틀립니다.
+1. ~~`src/lib/data/places-seongsan.ts`~~ — **완료.** 한국관광공사 TourAPI(KorService2)
+   실데이터로 교체했고 `DEFAULT_POLICY`를 씁니다. 임시 데이터 파일은 삭제했습니다.
+   수집은 `scripts/apis.py`(`tour_nearby`/`tour_intro`) + `npm run snapshot`,
+   적재는 `src/lib/data/places.ts`, 자유 텍스트 해석은 `src/lib/data/tour-hours.ts`.
+   비짓제주는 승인이 수일 걸려 못 받았고 관광공사로 대체했습니다.
+   **`EXPOSURE_BY_CAT3`가 이 파일에서 제일 조심할 표입니다** — 이 값이 틀리면 기상 필터가
+   그대로 틀립니다. 새 카테고리 코드가 생기면 `check:places`가 '미분류'로 잡아냅니다.
 2. ~~`src/lib/data/weather.ts`~~ — **완료.** 기상청 단기예보+특보 실시간 호출이 들어갔습니다.
    `DATA_GO_KR_KEY`만 `.env.local`에 넣으면 됩니다. `getWeather()`는 throw하지 않고
    실패 시 `isFallback: true`로 돌려줍니다. 실키로 한 번 확인한 뒤에 화면의
@@ -154,7 +165,7 @@ src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제�
   했으니(이 구조는 유지), **JS 없이도 대안을 넘길 수 있는 폴백**(이전/다음 링크)을
   함께 둡니다. 무대에서 JS가 죽어도 화면은 살아 있어야 합니다.
 - 교체하면 뒤 시간대의 출발 시각이 밀립니다. `PlanSlot.alternatives`를 그대로 끼워 넣지
-  말고 그 뒤를 다시 채우세요 — **이 재계산 함수가 F2에서 처음 필요한 코드입니다.**
+  않고 `pins`로 앞을 고정한 뒤 `generatePlan()`을 다시 부릅니다 (`plan/replace.ts`).
 
 **완료 기준**: 각 시간대에 대안이 2개 이상 있고, 스와이프하면 그 시간대만 바뀌며,
 새로고침할 때마다 조합이 달라진다.
@@ -168,6 +179,7 @@ src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제�
 |---|---|---|
 | 기상 | 강수·풍속·특보 vs 장소 유형 | **같은 위험의 후보 제거** |
 | 결항 | 항공·여객선 운항 여부 | 끊긴 교통편에 의존하는 후보 제외 |
+| 환승 | 배·비행기를 타야 하는 곳 | 지금 그 섬에 있지 않으면 제외 (`needsTransfer`) |
 | 영업 여부 | 영업시간·휴무·마감시간 | 확인 불가 장소는 자동 편성 대상에서 제외 |
 | 거리 | 남은 시간·정체·도보 한도 | 도착 후 이용시간 부족하면 제외 |
 
@@ -198,6 +210,12 @@ API로 확인합니다. API가 실패하면 계획 생성이 멈추는 게 아�
   필터가 그대로 틀립니다 — 실데이터 교체 시 이 필드부터 확인하세요.
 - 시각은 자정 기준 분(`MinuteOfDay`)으로 다루고, 현재 시각은 `jejuClock()`으로만 얻습니다
   (Vercel은 UTC라 `new Date().getHours()`를 쓰면 9시간 어긋납니다).
+- **배를 타야 하는 곳(`dependsOn`)은 결항이 아니어도 제외합니다.** `estimateTravelMinutes`가
+  육로 거리 기반이라 배편 시간표·대기시간을 모릅니다. 그대로 두면 성산항에서 우도 후보까지
+  '차로 10분'으로 계산해 실행 불가능한 일정이 나옵니다. 단 **이미 그 섬 안에 있으면**
+  (`FERRY_BOUNDS`) 허용합니다. 여객선 시간표 API가 생기면 이 제약을 풀 수 있습니다.
+- `EXPOSURE_RISKS.marine`에 `rain`이 들어 있습니다 — 우천에 유람선을 대안으로 내놓으면
+  '같은 위험은 피한다'는 약속이 깨집니다.
 
 ### 하지 않을 것 (Stretch — 시간이 남으면)
 
@@ -219,9 +237,11 @@ npm run lint    # ESLint
 cp .env.example .env.local   # 키 채우기 (런타임에 필수인 건 DATA_GO_KR_KEY 하나)
 npm run check:weather        # 기상청 발표시각·파싱·위험판정 assert (키 불필요)
 npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
-npm run check:filter         # F3 4개 제약 + F1 계획 생성 + 발표 시나리오 재현 assert (키 불필요)
+npm run check:places         # TourAPI 운영시간·휴무 파서 + 스냅샷 103건 적재 assert (키 불필요)
+npm run check:filter         # F3 제약 단위 assert + 실데이터 연결 확인 (키 불필요)
+npm run check:plan           # F1 계획 + F2 교체/재생성 + 발표 시나리오 재현 (키 불필요)
 npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
-npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/*.json (아직 미수집)
+npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/*.json (관광공사분 수집 완료)
 ```
 
 - 소스는 `src/` 아래, import alias는 `@/*`
@@ -250,7 +270,7 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 |---|---|---|
 | 기상청_단기예보 조회서비스 (15000099) | **실시간 호출** | 우천·강풍·폭염 필터 |
 | 기상청_기상특보 조회서비스 | **실시간 호출** | 강풍·풍랑 특보 → "같은 위험 후보 제거"의 근거 |
-| 한국관광공사_국문 관광정보 서비스_GW (15101578) | **사전 수집 → JSON 고정** | 후보 장소, 운영정보 |
+| 한국관광공사_국문 관광정보 서비스_GW (15101578) | **사전 수집 → JSON 고정 (완료)** | 후보 장소, 운영정보 |
 | 국토교통부_(TAGO)_버스정류소정보 | **사전 수집 → JSON 고정** | 도보권 정류소 |
 | 국토교통부_(TAGO)_버스도착정보 | 미사용 (차량 시연) | — |
 | 여객선 결항 | 공개 API 없음 → **사용자 입력** | 중단 원인 |

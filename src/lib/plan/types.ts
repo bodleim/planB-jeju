@@ -106,6 +106,14 @@ export interface PlanInput {
   readonly blockedTransport?: readonly TransportDependency[];
   /** 같은 seed면 같은 계획. F2의 새로고침은 이 값만 바꾼다. */
   readonly seed?: number;
+  /**
+   * 시간대별로 고정할 장소 id. 인덱스가 시간대 순서이고 빈 칸은 점수로 고른다.
+   * F2의 스와이프가 이 값만 바꿔 재생성한다 (`plan/replace.ts`).
+   *
+   * 고정한 곳도 `tryVisit`을 통과해야 편성된다 — 통과하지 못하면 그 시간대는 점수로
+   * 고르고 `diagnostics.notes`에 남긴다. 고정은 제약을 우회하는 수단이 아니다.
+   */
+  readonly pins?: readonly string[];
 }
 
 export interface PlanPolicy {
