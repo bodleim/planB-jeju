@@ -93,6 +93,14 @@ const DEFAULTS: Readonly<Record<string, { stay: number; cost: number }>> = {
   '38': { stay: 40, cost: 10000 },
   '39': { stay: 60, cost: 15000 },
 }
+/** 유형 라벨 — LLM 후보 선택과 화면 표시용. */
+const KIND_BY_TYPE: Readonly<Record<string, string>> = {
+  '12': '관광지',
+  '14': '문화시설',
+  '28': '레포츠',
+  '38': '쇼핑',
+  '39': '음식점',
+}
 const CAFE_CAT3 = 'A05020900'
 /** 카페는 음식점 평균(15,000원)을 쓰면 과대추정이라 따로 둔다. 체류도 짧다. */
 const CAFE_DEFAULTS = { stay: 45, cost: 7000 }
@@ -290,6 +298,9 @@ export function loadPlaces(month = new Date(snapshot.fetchedAt).getMonth() + 1):
       verified: closed !== null,
       source: '한국관광공사 국문 관광정보(TourAPI)',
       ...(item.tel ? { phone: item.tel } : {}),
+      // https 로 올린다 — 배포가 https 라 http 이미지는 mixed content 로 막힌다.
+      ...(item.firstimage ? { imageUrl: item.firstimage.replace(/^http:/, 'https:') } : {}),
+      kind: cat3 === CAFE_CAT3 ? '카페' : (KIND_BY_TYPE[contentType] ?? '관광지'),
     })
   }
 

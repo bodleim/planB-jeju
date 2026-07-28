@@ -60,7 +60,7 @@ assert.ok(
 
 // ------------------------------------------------------------------ F1: 계획 1개
 
-const category: TripCategory = { companion: 'couple', activity: 'indoor' }
+const category: TripCategory = { companion: 'couple', activity: ['indoor'] }
 const input: PlanInput = {
   origin: ctx.origin,
   startMinutes: START,

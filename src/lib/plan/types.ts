@@ -107,6 +107,11 @@ export interface PlanInput {
   /** 같은 seed면 같은 계획. F2의 새로고침은 이 값만 바꾼다. */
   readonly seed?: number;
   /**
+   * 사용자가 '직접 말하기'로 선호를 밝힌 장소 id. 점수 보너스로만 반영된다 —
+   * 제약(영업·기상·시간)을 우회하지 못한다.
+   */
+  readonly preferredIds?: readonly string[];
+  /**
    * 시간대별로 고정할 장소 id. 인덱스가 시간대 순서이고 빈 칸은 점수로 고른다.
    * F2의 스와이프가 이 값만 바꿔 재생성한다 (`plan/replace.ts`).
    *

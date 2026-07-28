@@ -1,16 +1,23 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: '플랜B 제주 — 끊긴 일정 다시 짜기',
+  title: '플랜B 제주',
   description:
-    '기상악화·결항·휴무로 제주 여행 일정이 중단됐을 때, 지금 위치와 남은 시간에 맞는 대체 일정을 만들어 줍니다.',
+    '기상악화·결항·휴무·정체로 제주 여행 일정이 끊겼을 때, 지금 있는 곳 주변에서 남은 시간에 맞는 일정을 다시 짜주는 서비스',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#ffffff',
 }
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ko">
-      <body className="bg-stone-50 text-stone-900 antialiased">{children}</body>
+      <body>{children}</body>
     </html>
   )
 }

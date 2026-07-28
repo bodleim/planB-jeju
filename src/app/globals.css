@@ -1,1 +1,1452 @@
 @import "tailwindcss";
+
+/* Figma 시안의 색·모양 토큰. Tailwind v4 @theme 이라 bg-teal, text-navy 처럼 쓴다. */
+@theme {
+  --color-navy: #23455c;
+  --color-teal: #7cc5c5;
+  --color-teal-deep: #3e8c8c;
+  --color-orange: #e2794f;
+  --color-mist: #eef4f3;
+  --color-mint: #f2f8f6;
+  --color-line: #dcebe7;
+  --color-muted: #7d97a1;
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--color-mist);
+  color: var(--color-navy);
+  font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  /* 무대 폰트: 웹폰트를 내려받지 않는다 — 네트워크가 죽어도 글꼴이 흔들리면 안 된다. */
+}
+
+/* 모바일 앱 프레임. 데스크톱에서는 가운데 폰 폭으로 뜬다. */
+.app {
+  position: relative;
+  margin-inline: auto;
+  min-height: 100svh;
+  width: 100%;
+  max-width: 402px;
+  background: #fff;
+  box-shadow: 0 18px 60px rgb(35 69 92 / 10%);
+}
+
+/* Frame 1 홈 — 393×852 시안을 기준으로 iPhone 17 Pro(402×874)까지 유동 확장한다. */
+.home-screen {
+  overflow-x: hidden;
+  padding:
+    max(54px, env(safe-area-inset-top))
+    25px
+    max(36px, env(safe-area-inset-bottom));
+}
+
+.home-logo {
+  height: 29px;
+}
+
+.home-logo img {
+  display: block;
+  height: 29px;
+  width: 123px;
+  object-fit: contain;
+}
+
+.home-screen form {
+  margin-top: 13px;
+}
+
+.location-inline {
+  display: block;
+  min-height: 24px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: #8aa5ae;
+  font: inherit;
+  font-size: 17px;
+  line-height: 24px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.location-inline:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--color-orange);
+  outline-offset: 3px;
+}
+
+.location-error {
+  position: absolute;
+  z-index: 2;
+  width: calc(100% - 50px);
+  margin-top: 4px;
+  border-radius: 12px;
+  background: #fff7f2;
+  padding: 8px 10px;
+  color: var(--color-orange);
+  font-size: 11px;
+  line-height: 1.45;
+  box-shadow: 0 6px 18px rgb(35 69 92 / 12%);
+}
+
+.home-weather {
+  display: grid;
+  grid-template-columns: minmax(92px, 1fr) minmax(77px, 0.86fr) auto;
+  align-items: center;
+  height: 55px;
+  margin-top: 16px;
+  border-radius: 18px;
+  background: var(--color-mint);
+  padding: 0 17px;
+  color: #4f6b76;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.weather-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  white-space: nowrap;
+}
+
+.weather-item img {
+  display: block;
+  flex: none;
+}
+
+.weather-recommend {
+  color: #d9713c;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.weather-recommend-safe {
+  color: var(--color-teal-deep);
+}
+
+.home-section h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 28px;
+  letter-spacing: -0.02em;
+}
+
+.home-time-section {
+  margin-top: 23px;
+}
+
+.home-time-card {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  height: 92px;
+  margin-top: 13px;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 21px;
+  background: #fff;
+  padding: 0 17px;
+}
+
+.home-time-card label {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.home-time-card label > span {
+  color: #8aa5ae;
+  font-size: 14px;
+  line-height: 17px;
+}
+
+.home-time-card input {
+  width: 92px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-navy);
+  font: inherit;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 34px;
+  text-align: center;
+  letter-spacing: -0.035em;
+  outline: none;
+}
+
+.home-time-card input:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 1px;
+}
+
+.home-time-card strong {
+  display: grid;
+  width: 67px;
+  height: 32px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-teal);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.home-time-adjust {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  width: 256px;
+  height: 36px;
+  margin: 16px auto 0;
+}
+
+.home-time-adjust button {
+  border: 1.5px solid #d5e7e8;
+  border-radius: 999px;
+  background: #fff;
+  color: #8aa5ae;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.home-time-adjust button:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 1px;
+}
+
+.home-companion-section {
+  margin-top: 26px;
+}
+
+.home-activity-section {
+  margin-top: 24px;
+}
+
+.home-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.home-section-heading a {
+  color: #8aa5ae;
+  font-size: 14px;
+  line-height: 20px;
+  text-decoration: none;
+}
+
+.home-section-heading a:focus-visible {
+  border-radius: 4px;
+  outline: 2px solid var(--color-orange);
+  outline-offset: 2px;
+}
+
+.home-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.home-chips label {
+  display: block;
+  cursor: pointer;
+}
+
+.home-chips input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.home-chips label > span {
+  display: inline-grid;
+  height: 45px;
+  place-items: center;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 18px;
+  color: #7a96a0;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.home-companion-chips label:has(input:checked) > span {
+  border-color: var(--color-teal);
+  background: var(--color-teal);
+  color: #fff;
+  font-weight: 800;
+}
+
+.home-activity-chips {
+  display: grid;
+  grid-template-columns: max-content max-content max-content;
+  margin-top: 11px;
+}
+
+.home-activity-chips label:has(input:checked) > span {
+  border-color: var(--color-teal);
+  background: #f4fbfa;
+  color: var(--color-teal-deep);
+  font-weight: 800;
+}
+
+.home-chips label:focus-within > span {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 1px;
+}
+
+.home-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 137px) minmax(0, 1fr);
+  gap: 9px;
+  height: 64px;
+  margin-top: 27px;
+}
+
+.home-action {
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.home-action-secondary {
+  border: 1.5px solid var(--color-teal);
+  background: #fff;
+  color: var(--color-teal-deep);
+}
+
+.home-action-primary {
+  border: 1.5px solid var(--color-teal);
+  background: var(--color-teal);
+  color: #fff;
+  font-size: 17px;
+}
+
+.home-action:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 2px;
+}
+
+@media (min-width: 431px) {
+  .app {
+    overflow: hidden;
+    border-radius: 34px;
+  }
+}
+
+@media (max-width: 374px) {
+  .home-screen {
+    padding-inline: 20px;
+  }
+
+  .home-weather {
+    grid-template-columns: 1fr 0.78fr auto;
+    padding-inline: 13px;
+    font-size: 14px;
+  }
+
+  .weather-item {
+    gap: 6px;
+  }
+
+  .weather-recommend {
+    font-size: 13px;
+  }
+
+  .home-time-card {
+    padding-inline: 9px;
+  }
+
+  .home-chips label > span {
+    padding-inline: 15px;
+    font-size: 15px;
+  }
+}
+
+/* 스플래시 (page.tsx Splash — 쿼리 없는 첫 진입 1회). 원본: planb-splash-logo.html.
+   JS 타이머 대신 전부 CSS 키프레임이라 JS 가 죽어도 재생되고 스스로 사라진다. */
+.splash {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  z-index: 60;
+  width: 100%;
+  max-width: 402px; /* .app 프레임과 같은 폭 */
+  overflow: hidden;
+  transform: translateX(-50%);
+  background: linear-gradient(160deg, #78c6c6 0%, #5aaeae 46%, #3e8c8c 100%);
+  animation: splash-out 0.5s ease 4.5s forwards;
+}
+.splash-halo {
+  position: absolute;
+  top: -90px;
+  right: -110px;
+  width: 340px;
+  height: 340px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 9%);
+}
+.splash-halo2 {
+  position: absolute;
+  bottom: -140px;
+  left: -120px;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 6%);
+}
+.splash-core {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 30px;
+  text-align: center;
+}
+.splash-lock {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.splash-plan {
+  display: flex;
+  gap: 9px;
+}
+.splash-plan span {
+  font-size: 46px;
+  font-weight: 700;
+  color: #fff;
+  line-height: 1;
+  opacity: 0;
+  transform: translateY(7px);
+  animation: splash-rise 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+.splash-plan span:nth-child(1) { animation-delay: 0.12s; }
+.splash-plan span:nth-child(2) { animation-delay: 0.22s; }
+.splash-plan span:nth-child(3) { animation-delay: 0.31s; }
+.splash-plan span:nth-child(4) { animation-delay: 0.41s; }
+.splash-tile {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 19px;
+  background: #fff;
+  opacity: 0;
+  transform: scale(0.8);
+  animation: splash-pop 0.46s cubic-bezier(0.2, 0.9, 0.25, 1) 0.56s forwards;
+}
+.splash-tile b {
+  position: absolute;
+  font-size: 42px;
+  font-weight: 700;
+  line-height: 1;
+  background: linear-gradient(150deg, #6fc6be, #4fa5ac);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.splash-a {
+  opacity: 0;
+  animation: splash-a 0.95s ease 0.7s forwards;
+}
+.splash-b {
+  opacity: 0;
+  transform: translateY(9px);
+  animation: splash-rise 0.4s cubic-bezier(0.2, 0.9, 0.25, 1) 1.44s forwards;
+}
+.splash-lines {
+  position: relative;
+  width: 100%;
+  height: 110px;
+  margin-top: 44px;
+}
+.splash-lines p {
+  position: absolute;
+  inset-inline: 0;
+  top: 50%;
+  translate: 0 -50%;
+  margin: 0 auto;
+  max-width: 310px;
+  font-size: 21px;
+  font-weight: 500;
+  color: #fff;
+  line-height: 1.5;
+  opacity: 0;
+}
+.splash-lines p:nth-child(1) { animation: splash-cycle 0.95s ease 1.9s forwards; }
+.splash-lines p:nth-child(2) { animation: splash-cycle 0.95s ease 2.85s forwards; }
+.splash-lines p:nth-child(3) {
+  transform: translateY(6px);
+  animation: splash-rise 0.46s cubic-bezier(0.2, 0.8, 0.2, 1) 3.8s forwards;
+}
+.splash-bottom {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 66px;
+  text-align: center;
+  opacity: 0;
+  animation: splash-in 0.5s ease 1.76s forwards;
+}
+.splash-track {
+  width: 132px;
+  height: 3px;
+  margin: 0 auto 14px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 26%);
+  overflow: hidden;
+}
+.splash-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 3px;
+  background: #fff;
+  animation: splash-fill 2.3s cubic-bezier(0.3, 0.1, 0.3, 1) 1.8s forwards;
+}
+.splash-stats {
+  position: relative;
+  height: 18px;
+  margin: 0;
+  font-size: 13px;
+  color: rgb(255 255 255 / 86%);
+}
+.splash-stats span {
+  position: absolute;
+  inset-inline: 0;
+  opacity: 0;
+}
+.splash-stats span:nth-child(1) { animation: splash-cycle 0.8s ease 1.8s forwards; }
+.splash-stats span:nth-child(2) { animation: splash-cycle 0.8s ease 2.6s forwards; }
+.splash-stats span:nth-child(3) { animation: splash-in 0.3s ease 3.4s forwards; }
+
+@keyframes splash-rise {
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes splash-pop {
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes splash-in {
+  to { opacity: 1; }
+}
+@keyframes splash-fill {
+  to { width: 100%; }
+}
+@keyframes splash-a {
+  0% { opacity: 0; transform: none; }
+  25% { opacity: 1; transform: none; }
+  70% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-13px); }
+}
+@keyframes splash-cycle {
+  0% { opacity: 0; transform: translateY(6px); }
+  30% { opacity: 1; transform: none; }
+  75% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: none; }
+}
+@keyframes splash-out {
+  to { opacity: 0; visibility: hidden; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .splash { display: none; }
+}
+
+/* 카카오맵 커스텀 마커 (RouteMap.tsx 의 CustomOverlay 가 그린다) */
+.map-pin {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 27px;
+  height: 27px;
+  border-radius: 50%;
+  background: #e2794f;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 3px 8px rgb(35 69 92 / 30%);
+}
+.map-pin::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top: 7px solid #e2794f;
+  border-bottom: 0;
+}
+.map-origin {
+  width: 18px;
+  height: 18px;
+  border: 4.5px solid var(--color-teal-deep);
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 2px 6px rgb(35 69 92 / 25%);
+}
+
+/* 선택형 칩 — <label class="chip"><input type="radio" hidden> 문구</label> */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1.5px solid var(--color-line);
+  border-radius: 999px;
+  background: #fff;
+  padding: 9px 16px;
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--color-navy);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.chip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+label.chip:has(input:checked) {
+  border-color: var(--color-teal-deep);
+  background: var(--color-teal-deep);
+  color: #fff;
+  font-weight: 700;
+}
+.chip:focus-within,
+.chip:focus-visible {
+  outline: 2px solid var(--color-orange);
+  outline-offset: 1px;
+}
+
+.btn-primary {
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: var(--color-teal);
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  cursor: pointer;
+}
+.btn-ghost {
+  display: grid;
+  place-items: center;
+  border: 1.5px solid var(--color-teal);
+  border-radius: 16px;
+  background: #fff;
+  padding: 16px;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--color-teal-deep);
+  cursor: pointer;
+}
+
+/* 바텀시트 (직접 말하기 · 시간대 바꾸기) — 상태는 쿼리스트링, JS 없이 링크로 여닫는다 */
+.sheet-dim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  background: rgb(35 69 92 / 45%);
+}
+.sheet {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 50;
+  margin-inline: auto;
+  max-width: 430px;
+  max-height: 78dvh;
+  overflow-y: auto;
+  border-radius: 24px 24px 0 0;
+  background: #fff;
+  padding: 20px 20px calc(20px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px rgb(35 69 92 / 18%);
+}
+.sheet-grip {
+  margin: 0 auto 14px;
+  height: 4px;
+  width: 44px;
+  border-radius: 999px;
+  background: var(--color-line);
+}
+
+/* 자유 입력 pill (✦ 프롬프트 + ↑ 보내기) */
+.prompt-pill {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  background: var(--color-mint);
+  padding: 6px 6px 6px 16px;
+}
+.prompt-pill input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  padding: 8px 0;
+  font-size: 14px;
+  color: var(--color-navy);
+  outline: none;
+}
+.prompt-pill input::placeholder {
+  color: var(--color-muted);
+}
+.prompt-send {
+  display: grid;
+  place-items: center;
+  height: 38px;
+  width: 38px;
+  flex: none;
+  border: 0;
+  border-radius: 50%;
+  background: var(--color-teal);
+  color: #fff;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.badge-open {
+  display: inline-block;
+  border-radius: 8px;
+  background: #ddefdc;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #35703c;
+}
+.badge-close {
+  display: inline-block;
+  border-radius: 8px;
+  background: #f7ecd2;
+  padding: 3px 8px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #9a6b1f;
+}
+
+/* Frame 3 — 일정 결과. 393×852 좌표를 기준으로 하고 402×874에서는 폭만 자연스럽게 늘어난다. */
+.result-screen {
+  min-height: 100svh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.result-map-panel {
+  position: relative;
+  height: 237px;
+  overflow: hidden;
+  background: #dce8e3;
+}
+
+.result-map-fallback {
+  display: block;
+  width: 100%;
+  height: 237px;
+  object-fit: cover;
+}
+
+.result-map-caption {
+  position: absolute;
+  right: 12px;
+  bottom: 24px;
+  z-index: 4;
+  margin: 0;
+  color: rgb(35 69 92 / 45%);
+  font-size: 10px;
+}
+
+.result-back-button {
+  position: absolute;
+  top: max(44px, env(safe-area-inset-top));
+  left: 18px;
+  z-index: 20;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--color-navy);
+  font-size: 27px;
+  font-weight: 500;
+  line-height: 1;
+  box-shadow: 0 3px 12px rgb(35 69 92 / 16%);
+}
+
+.result-panel {
+  position: absolute;
+  z-index: 10;
+  top: 213px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-radius: 28px 28px 0 0;
+  background: #fff;
+}
+
+.result-grip {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  width: 39px;
+  height: 4px;
+  transform: translateX(-50%);
+  border-radius: 99px;
+  background: #d9e5e3;
+}
+
+.result-heading {
+  position: absolute;
+  top: 38px;
+  right: 25px;
+  left: 34px;
+}
+
+.result-title-row {
+  display: flex;
+  align-items: center;
+}
+
+.result-title-row h1 {
+  margin: 0;
+  color: var(--color-navy);
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 31px;
+  letter-spacing: -0.035em;
+}
+
+.result-title-row > span {
+  display: grid;
+  min-width: 82px;
+  height: 31px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--color-teal);
+  padding: 0 11px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.result-heading-refresh {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: none;
+  margin-left: 10px;
+  place-items: center;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 50%;
+  color: #6f8c97;
+  font-size: 17px;
+}
+
+.result-heading > p {
+  margin: 2px 0 0;
+  color: #8aa5ae;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.result-list {
+  position: absolute;
+  top: 116px;
+  right: 32px;
+  left: 34px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  height: 101px;
+}
+
+.result-row + .result-row {
+  margin-top: 20px;
+}
+
+.result-time {
+  position: relative;
+  padding-top: 10px;
+}
+
+.result-time strong {
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 20px;
+}
+
+.result-time > span {
+  position: absolute;
+  top: 38px;
+  bottom: -16px;
+  left: 13px;
+  border-left: 2px dotted #c6dcd8;
+}
+
+.result-row:last-child .result-time > span {
+  display: none;
+}
+
+.slot-card {
+  display: flex;
+  align-items: center;
+  height: 101px;
+  gap: 12px;
+  border: 1.5px solid transparent;
+  border-radius: 18px;
+  background: var(--color-mint);
+  padding: 12px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.slot-card-selected {
+  border-color: var(--color-teal-deep);
+  box-shadow: 0 0 0 2px rgb(62 140 140 / 10%);
+}
+
+.slot-card img,
+.slot-card > div:first-child {
+  border-radius: 13px;
+}
+
+.slot-card-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.slot-card-name {
+  overflow: hidden;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 21px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-card-meta {
+  overflow: hidden;
+  margin: 2px 0 0;
+  color: #7d97a1;
+  font-size: 11px;
+  line-height: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-card-badges {
+  display: flex;
+  gap: 6px;
+  margin: 5px 0 0;
+}
+
+.slot-card-chevron {
+  flex: none;
+  color: #8aa5ae;
+  font-size: 19px;
+}
+
+.result-actions {
+  position: absolute;
+  top: 497px;
+  right: 40px;
+  left: 32px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 44px;
+  overflow: hidden;
+}
+
+.result-actions > a:not(.result-refresh) {
+  display: grid;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 999px;
+  background: #fff;
+  padding: 0 13px;
+  color: #6f8c97;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.result-prompt {
+  position: absolute;
+  top: 545px;
+  right: 32px;
+  left: 32px;
+}
+
+.result-prompt .prompt-pill {
+  height: 54px;
+}
+
+.result-empty {
+  padding: 58px 22px;
+}
+
+.result-back {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  color: var(--color-teal-deep);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+/* Frame 6 — 선택된 시간대 위에 올라오는 짧은 교체 시트. */
+.swap-sheet {
+  height: 271px;
+  max-height: none;
+  overflow: hidden;
+  border-radius: 28px 28px 0 0;
+  padding: 0;
+  box-shadow: 0 -8px 28px rgb(35 69 92 / 15%);
+}
+
+.swap-sheet-heading {
+  position: absolute;
+  top: 27px;
+  right: 30px;
+  left: 30px;
+}
+
+.swap-sheet-heading h2 {
+  margin: 0;
+  overflow: hidden;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 25px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.swap-sheet-heading p {
+  margin: 2px 0 0;
+  color: #8aa5ae;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.swap-suggestions {
+  position: absolute;
+  top: 95px;
+  right: 0;
+  left: 0;
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  border-top: 1px solid #e1ece9;
+  padding: 19px 28px 18px;
+  scrollbar-width: none;
+}
+
+.swap-suggestions::-webkit-scrollbar {
+  display: none;
+}
+
+.swap-suggestions a {
+  display: grid;
+  height: 36px;
+  flex: none;
+  place-items: center;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 999px;
+  padding: 0 14px;
+  color: #678590;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.swap-prompt {
+  position: absolute;
+  right: 28px;
+  bottom: max(23px, env(safe-area-inset-bottom));
+  left: 28px;
+  border-top: 1px solid #e1ece9;
+  padding-top: 14px;
+}
+
+.swap-prompt .prompt-pill {
+  height: 64px;
+}
+
+/* Frame 5 — 검색 결과는 시트 안 목록이 아니라 독립된 전체 화면이다. */
+.search-screen {
+  min-height: 100svh;
+  overflow: hidden;
+  background: #fff;
+}
+
+.search-header {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 9px;
+  height: 117px;
+  border-bottom: 1px solid #dfeae8;
+  padding: max(43px, env(safe-area-inset-top)) 18px 0;
+}
+
+.search-header > a {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: var(--color-navy);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.search-header h1 {
+  margin: 5px 0 0;
+  font-size: 18px;
+  font-weight: 900;
+  line-height: 24px;
+}
+
+.search-header p {
+  margin: 1px 0 0;
+  color: #8aa5ae;
+  font-size: 12px;
+  line-height: 17px;
+}
+
+.search-conversation {
+  height: 178px;
+  padding-top: 17px;
+}
+
+.search-user-bubble {
+  min-height: 78px;
+  margin: 0 16px 0 41px;
+  border-radius: 18px 18px 4px 18px;
+  background: #8cc9cd;
+  padding: 16px 19px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.search-assistant {
+  margin: 19px 18px 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 21px;
+}
+
+.search-assistant span {
+  display: block;
+  color: var(--color-navy);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 21px;
+}
+
+.search-filters {
+  display: flex;
+  height: 58px;
+  gap: 8px;
+  overflow-x: auto;
+  border-bottom: 1px solid #dfeae8;
+  padding: 8px 18px 10px;
+  scrollbar-width: none;
+}
+
+.search-filters::-webkit-scrollbar {
+  display: none;
+}
+
+.search-filters a {
+  display: grid;
+  height: 40px;
+  flex: none;
+  place-items: center;
+  border: 1.5px solid #d5e7e8;
+  border-radius: 999px;
+  padding: 0 15px;
+  color: #78949f;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.search-filters a[aria-current="true"] {
+  border-color: var(--color-teal-deep);
+  background: var(--color-teal-deep);
+  color: #fff;
+}
+
+.search-results {
+  height: calc(100svh - 460px);
+  min-height: 285px;
+  margin: 0;
+  overflow: hidden;
+  padding: 0;
+  list-style: none;
+}
+
+.search-result {
+  position: relative;
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 76px;
+  gap: 14px;
+  min-height: 120px;
+  border-bottom: 1px solid #e1ece9;
+  padding: 18px 16px 16px 18px;
+}
+
+.search-result:first-child {
+  min-height: 154px;
+  padding-top: 38px;
+}
+
+.search-rank {
+  position: absolute;
+  top: 12px;
+  left: 13px;
+  z-index: 2;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-orange);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  box-shadow: 0 2px 6px rgb(35 69 92 / 18%);
+}
+
+.search-result-copy {
+  min-width: 0;
+  align-self: center;
+}
+
+.search-result-copy h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-result-copy p {
+  margin: 3px 0 0;
+  color: #78949f;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+.search-result-copy > span {
+  display: block;
+  overflow: hidden;
+  margin-top: 4px;
+  color: var(--color-teal-deep);
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.search-add {
+  display: grid;
+  width: 76px;
+  min-height: 44px;
+  align-self: center;
+  place-items: center;
+  border: 1.5px solid var(--color-teal-deep);
+  border-radius: 999px;
+  color: var(--color-teal-deep);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.search-add-selected {
+  border-color: var(--color-teal);
+  background: var(--color-teal);
+  color: #fff;
+}
+
+.search-result-disabled {
+  opacity: 0.68;
+}
+
+.search-result-disabled .search-rank {
+  background: #9bb0b7;
+}
+
+.search-result-copy .search-excluded-reason {
+  color: var(--color-orange);
+}
+
+.search-add-disabled {
+  border-color: #d7e2e0;
+  background: #eef3f2;
+  color: #a3b4b9;
+}
+
+.search-prompt {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  min-height: 107px;
+  border-top: 1px solid #dfeae8;
+  background: #fff;
+  padding: 16px 18px max(23px, env(safe-area-inset-bottom));
+}
+
+.search-prompt .prompt-pill {
+  height: 67px;
+}
+
+.prompt-spark {
+  flex: none;
+  color: var(--color-teal-deep);
+}
+
+.say-sheet {
+  height: 424px;
+  max-height: none;
+  overflow: hidden;
+  padding: 12px 21px 11px;
+}
+
+.say-sheet .sheet-grip {
+  margin-bottom: 9px;
+}
+
+.say-sheet > h2 {
+  margin: 0 2px;
+}
+
+.say-sheet > h2 + p {
+  margin: 2px 2px 0;
+}
+
+.say-sheet > h2 + p + p {
+  margin: 28px 2px 9px;
+}
+
+.say-sheet .space-y-2 {
+  display: grid;
+  gap: 10px;
+  margin-top: 0;
+  padding-top: 8px;
+}
+
+.say-sheet .space-y-2 > a {
+  display: flex;
+  min-height: 50px;
+  align-items: center;
+  margin: 0;
+  padding: 11px 16px;
+}
+
+.say-sheet .space-y-2 > a:first-child {
+  min-height: 70px;
+}
+
+.say-sheet form {
+  margin-top: 13px;
+  border-top: 1px solid #e1ece9;
+  padding-top: 11px;
+}
+
+.say-sheet .prompt-pill {
+  height: 59px;
+}
+
+.prompt-send {
+  width: 44px;
+  height: 44px;
+}
+
+@media (max-width: 374px) {
+  .result-heading,
+  .result-list {
+    right: 20px;
+    left: 22px;
+  }
+
+  .result-row {
+    grid-template-columns: 48px minmax(0, 1fr);
+  }
+
+  .result-actions {
+    right: 20px;
+    left: 22px;
+  }
+
+  .result-actions > a:not(.result-refresh) {
+    padding-inline: 10px;
+    font-size: 11px;
+  }
+
+  .result-prompt {
+    right: 22px;
+    left: 22px;
+  }
+}
+
+@media (min-height: 870px) {
+  .result-panel {
+    top: 221px;
+  }
+
+  .result-list {
+    top: 119px;
+  }
+
+  .result-row + .result-row {
+    margin-top: 22px;
+  }
+
+  .result-actions {
+    top: 507px;
+  }
+
+  .result-prompt {
+    top: 557px;
+  }
+}

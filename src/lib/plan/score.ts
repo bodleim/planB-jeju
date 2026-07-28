@@ -35,7 +35,11 @@ const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
  */
 export function categoryFitOf(place: Place, category: TripCategory): number {
   const companion = clamp01(place.companionFit[category.companion] ?? 0);
-  const activity = clamp01(place.activityFit[category.activity] ?? 0);
+  // 활동은 중복 선택(OR) — 고른 것 중 가장 잘 맞는 축으로 평가한다.
+  const activity = category.activity.reduce(
+    (best, a) => Math.max(best, clamp01(place.activityFit[a] ?? 0)),
+    0,
+  );
   if (companion <= 0 || activity <= 0) return 0;
   return Math.sqrt(companion * activity);
 }
@@ -50,6 +54,11 @@ export interface ScoreContext {
   /** 이동시간 정규화 기준(분). */
   readonly travelCeiling: number;
   readonly deadlineMinutes: MinuteOfDay;
+  /**
+   * 사용자가 직접 말한 선호 장소 ('직접 말하기' → LLM 이 후보 목록에서 고른 id).
+   * 제약을 통과한 후보 사이의 순위만 끌어올린다 — 탈락 후보를 되살리지 못한다.
+   */
+  readonly preferredIds?: ReadonlySet<string>;
 }
 
 export function scoreVisit(visit: FeasibleVisit, context: ScoreContext): ScoreBreakdown {
@@ -78,13 +87,20 @@ export function scoreVisit(visit: FeasibleVisit, context: ScoreContext): ScoreBr
     (context.usedAreas.has(place.area) ? 0 : 0.6) +
     (context.usedExposures.has(place.exposure) ? 0 : 0.4);
 
+  // 사용자가 직접 말한 선호는 가중치 합(1.0) 바깥의 추가 보너스다. 0.35 는 통과 후보들의
+  // 점수 격차(보통 0.1~0.2)보다 확실히 커서, **제약을 통과했다면 그 시간대를 차지한다** —
+  // '직접 말하기'는 추천 힌트가 아니라 사용자의 결정이다. 선호끼리는 여전히 기본 점수로 겨룬다.
+  // 제약(영업·기상·남은시간)은 tryVisit 이 먼저 자르므로 이 보너스로는 못 되살린다.
+  const preferred = context.preferredIds?.has(place.id) ? 0.35 : 0;
+
   const total =
     SCORE_WEIGHTS.feasibility * feasibility +
     SCORE_WEIGHTS.timeEfficiency * timeEfficiency +
     SCORE_WEIGHTS.categoryFit * categoryFit +
     SCORE_WEIGHTS.cost * cost +
     SCORE_WEIGHTS.travel * travel +
-    SCORE_WEIGHTS.diversity * diversity;
+    SCORE_WEIGHTS.diversity * diversity +
+    preferred;
 
   return { feasibility, timeEfficiency, categoryFit, cost, travel, diversity, total };
 }

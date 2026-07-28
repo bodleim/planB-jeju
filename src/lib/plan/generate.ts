@@ -200,6 +200,10 @@ export function generatePlan(
   const travelCeiling = Math.max(20, Math.min(90, Math.round(input.remainingMinutes / 3)));
 
   const rng = createRng(input.seed ?? 1);
+  const preferredIds =
+    input.preferredIds !== undefined && input.preferredIds.length > 0
+      ? new Set(input.preferredIds)
+      : undefined;
   const usedIds = new Set<string>();
   const usedAreas = new Set<string>();
   const usedExposures = new Set<Exposure>();
@@ -225,6 +229,7 @@ export function generatePlan(
       costCeiling,
       travelCeiling,
       deadlineMinutes,
+      ...(preferredIds !== undefined ? { preferredIds } : {}),
     };
 
     const scored: ScoredVisit[] = [];

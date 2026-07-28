@@ -38,10 +38,14 @@ export type CompanionType = 'family' | 'couple' | 'solo';
 
 export type ActivityStyle = 'indoor' | 'food' | 'activity';
 
-/** 사용자가 고른 카테고리 한 쌍. */
+/**
+ * 사용자가 고른 카테고리. 동반 유형은 하나, 활동 성격은 **하나 이상**(중복 선택, OR 매칭).
+ * 활동을 여러 개 고르면 그중 하나라도 맞는 후보가 편성 대상이고, 적합도는 가장 잘 맞는
+ * 축으로 계산한다 (`categoryFitOf`). 빈 배열은 만들지 말 것 — 모든 후보가 탈락한다.
+ */
 export interface TripCategory {
   readonly companion: CompanionType;
-  readonly activity: ActivityStyle;
+  readonly activity: readonly ActivityStyle[];
 }
 
 export const COMPANION_TYPES: readonly CompanionType[] = ['family', 'couple', 'solo'];
@@ -101,6 +105,10 @@ export interface Place {
   readonly source: string;
   readonly infoUrl?: string;
   readonly phone?: string;
+  /** 관광공사 대표 이미지. 없는 곳(103곳 중 4곳)은 화면이 색 블록으로 대신한다. */
+  readonly imageUrl?: string;
+  /** 유형 라벨 (관광지·문화시설·음식점·카페…). LLM 이 후보를 고를 때 이름과 함께 본다. */
+  readonly kind?: string;
 }
 
 /**

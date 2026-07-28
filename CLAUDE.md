@@ -31,7 +31,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
 | F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
 | F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
-| 시연 화면 | **완료** `src/app/page.tsx` — 서버 렌더링 + GET 폼/링크, 스와이프는 `SwipeSlot` | HTTP 로만 확인 — **브라우저 스와이프·위치감지는 미확인** |
+| 시연 화면 | **완료 — Figma 시안(`public/figma/`) 기반 4화면** `src/app/page.tsx` — 홈 / 직접 말하기 시트(`say=1`) / 일정 결과 / 시간대 바꾸기 시트(`swap=N`). 전부 서버 렌더링 + GET 폼/링크이고 바텀시트도 쿼리로 여닫는다. 스와이프는 `SwipeSlot`. 결과 상단 지도는 **카카오맵**(`RouteMap.tsx`, `NEXT_PUBLIC_KAKAO_JS_KEY`) — 키가 없거나 SDK 로드 실패 시 SVG 개략도로 폴백. ⚠️ JS 키는 **[JavaScript SDK 도메인] 이 등록된 키**를 써야 한다 (2026-07-28 현재 'Default JS Key' `4ce867...` — '우리친해요' 키는 비활성화됨. 2026-07-21 콘솔 개편으로 플랫폼>Web 등록은 지도 SDK 에 안 쓰인다). 배포 시 같은 키의 [JavaScript SDK 도메인] 에 배포 도메인 추가 필요 | 지도 렌더는 headless Chrome 스크린샷으로 확인 (2026-07-28). **브라우저 스와이프·위치감지는 미확인** |
+| 직접 말하기 | **완료 — 2단.** ① `GEMINI_API_KEY` 가 있으면 `src/lib/llm-intent.ts` — gemini-2.5-flash + responseSchema(구조화 출력)로 원인·동반·활동·시간 추출 + **후보 목록에서 id 고르기**(좋아하는 것 `prefer`, 못 먹는 것 등 `avoid`). LLM 은 우리가 준 후보 id 만 답할 수 있고 목록 밖 id 는 `validateIntent` 가 버린다 — 사실 생성 통로 없음 (도메인 규칙 1). LLM 은 한 줄 응답(`reply`)도 돌려준다 — "승마장은 후보에 없어요" 처럼 요구가 후보와 안 맞을 때 조용히 실패하지 않기 위한 채널 (후보 목록 기반 사실만 말하게 프롬프트로 제한). ② 키 없음·쿼터 초과(429)·타임아웃(8초)·비정상 응답이면 `src/lib/prompt.ts` 키워드 표 폴백 + 화면에 "해석기가 응답하지 않아 기본 해석만 적용" 표시. 키는 aistudio.google.com/apikey 에서 무료 발급 (OpenAI 는 크레딧 문제로 Gemini 로 교체, 2026-07-28) 결과는 `avoid`/`prefer` 쿼리 파라미터로 유지 (LLM 호출은 문장 제출 때 1회). avoid 는 하드 제외 + '제외한 후보' 에 표시, prefer 는 **결정적 보너스(+0.35)** — 영업·기상·시간 제약을 통과하면 그 시간대를 차지한다. 제약 우회는 불가 (tryVisit 이 먼저 자름). 되묻는 대화 없음 — 문장 1회 → 즉시 결정 | `npm run check:intent` (응답 검증), `npm run check:prompt` (폴백). **LLM 실경로는 키 넣고 미검증** |
 | 위치 입력 | **완료** 브라우저 위치 감지(`UseMyLocation`) + 장소 이름 검색(`searchPlaces`). 하드코딩 출발지 목록 없음 | HTTP 로 검색 경로 확인 |
 | 인원수·확정 | **완료** 인원수가 예상 지출에 반영되고, 확정하면 길찾기·전화 체크리스트를 준다 (예약은 하지 않는다) | HTTP 로 확인 |
 
@@ -52,9 +53,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 /?go=1&cause=ferry_cancelled&from=성산항&remaining=300&party=2&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00
 ```
 
-**출발지는 하드코딩하지 않습니다.** 위치는 브라우저 감지(`lat`/`lng`)나 장소 이름 검색
-(`from`, 스냅샷 안에서 찾음)으로 받고, **둘 다 없으면 계획을 만들지 않고 위치를 요청합니다** —
-임의의 지점으로 채우면 '지금 있는 곳 주변' 이라는 전제가 거짓이 됩니다.
+**위치는 브라우저 감지(`lat`/`lng`)나 장소 이름 검색(`from`, 스냅샷 안에서 찾음)으로 받습니다.**
+⚠️ **시연 임시 고정**: 둘 다 없으면 현재 위치를 **성산항으로 간주**합니다 (스냅샷 범위가
+성산권뿐이라 실제 위치로는 시연이 안 됨). 원래 원칙은 '둘 다 없으면 계획을 만들지 않고 위치를
+요청한다' — 임의의 지점으로 채우면 '지금 있는 곳 주변' 이라는 전제가 거짓이 되기 때문입니다.
+되돌리는 위치는 `page.tsx` origin 계산부의 `ponytail:` 주석에 있습니다.
 
 **남은 일**
 1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)와 위치 권한 팝업은 HTTP 로 검증할 수
@@ -85,7 +88,9 @@ src/lib/plan/types.ts            PlanInput, Plan, PlanSlot, PlanPolicy, 탈락 �
 src/lib/data/places.ts           TourAPI 스냅샷 → Place[], searchPlaces(), needsBoatFrom()
 src/lib/data/tour-hours.ts       usetime/restdate 자유 텍스트 → WeeklyHours (정규식만)
 src/lib/{geo,hours,time,rng}.ts  거리·이동시간, 영업시간 판정, 제주 시각, 시드 난수
-src/app/page.tsx                 시연 화면 (서버 렌더링 + GET)
+src/lib/llm-intent.ts            직접 말하기 — OpenAI 해석 + 후보 id 선택 (실패 시 아래로 폴백)
+src/lib/prompt.ts                직접 말하기 — 키워드 표 파서 (폴백, LLM 아님)
+src/app/page.tsx                 시연 화면 (서버 렌더링 + GET, Figma 시안 구현)
 src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이프·위치 감지)
 ```
 
@@ -114,9 +119,10 @@ src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이�
   클라이언트이고, 하는 일은 그 링크로 이동하는 것뿐입니다.
 - 리허설 URL을 북마크하세요:
   `/?go=1&cause=ferry_cancelled&from=성산항&remaining=300&party=2&car=yes&at=10:00&companion=couple&activity=indoor&checkin=16:00`
+  (`remaining`/`checkin`은 계속 동작하는 레거시이고, 새 화면이 만드는 링크는 `end=15:00` 형태입니다.)
   `at`을 비우면 실제 현재 시각입니다 — 새벽에 열면 후보 0곳이 됩니다.
   위치는 `lat`/`lng`(브라우저 감지)가 있으면 그걸 쓰고, 없으면 `from`(장소 이름 검색)을
-  씁니다. **둘 다 없으면 계획을 만들지 않고 위치를 요청합니다.**
+  씁니다. 둘 다 없으면 **시연 임시 고정으로 성산항을 현재 위치로 간주**합니다 (위 ⚠️ 참고).
 - `pins`는 **장소 id**를 담습니다. '2번째 대안' 같은 인덱스로 저장하면 출발 시각이 바뀔 때
   링크가 가리키는 곳이 달라집니다.
 - 스와이프 순회 순서는 **점수 내림차순, 동점은 id**로 고정합니다. 채택안을 맨 앞에 두면
@@ -168,16 +174,17 @@ src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이�
 
 | 입력 | 설명 |
 |---|---|
-| 위치 | 브라우저 위치 감지(`lat`/`lng`) 또는 장소 이름 검색(`from` → `searchPlaces`). 둘 다 없으면 계획을 만들지 않습니다 |
+| 위치 | 브라우저 위치 감지(`lat`/`lng`) 또는 장소 이름 검색(`from` → `searchPlaces`). 둘 다 없으면 ⚠️ 시연 임시 고정으로 성산항을 씁니다 |
 | 시간 | 시작 시각과 남은 시간 (또는 종료 시각) |
-| 추천 카테고리 | **두 축**. 동반 유형(가족·커플·혼자) 하나 + 활동 성격(실내 위주·먹거리·액티비티) 하나 |
+| 추천 카테고리 | **두 축**. 동반 유형(가족·커플·혼자) 하나 + 활동 성격(실내 위주·먹거리·액티비티) **하나 이상** — 활동은 중복 선택(OR)이고 `TripCategory.activity` 가 배열이다 |
 
-카테고리는 계획의 성격을 정하는 값이지 단순 필터가 아닙니다. 한 일정 안의 방문지들이
-서로 다른 성격으로 섞이면 안 됩니다.
+카테고리는 계획의 성격을 정하는 값이지 단순 필터가 아닙니다. 계획의 성격은 사용자가 고른
+활동들의 합집합입니다 — 고르지 않은 성격이 섞여 들어오면 안 됩니다.
 
 장소마다 두 축의 적합도(`companionFit`, `activityFit`)를 0~1로 두고, **양쪽이 모두 0보다
-커야** 후보가 됩니다. 점수는 두 값의 기하평균이라 한 축만 뛰어난 곳이 양쪽 고른 곳보다
-아래로 갑니다 — '가족 + 먹거리'는 가족에게 맞으면서 먹거리이기도 해야 합니다.
+커야** 후보가 됩니다 (활동은 고른 것 중 가장 잘 맞는 축으로 평가). 점수는 두 값의
+기하평균이라 한 축만 뛰어난 곳이 양쪽 고른 곳보다 아래로 갑니다 — '가족 + 먹거리'는
+가족에게 맞으면서 먹거리이기도 해야 합니다.
 
 위치가 성산권에서 멀면 조용히 빈 결과를 주지 않고 `diagnostics.nearestCandidateKm`에
 거리를 남깁니다. 스냅샷 범위가 성산권뿐이라 생기는 한계를 화면이 설명할 수 있어야 합니다.
@@ -278,6 +285,8 @@ npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인
 npm run check:places         # TourAPI 운영시간·휴무 파서 + 스냅샷 103건 적재 assert (키 불필요)
 npm run check:filter         # F3 제약 단위 assert + 실데이터 연결 확인 (키 불필요)
 npm run check:plan           # F1 계획 + F2 교체/재생성 + 발표 시나리오 재현 (키 불필요)
+npm run check:prompt         # 직접 말하기 폴백(키워드 표) — 예시 문장 매핑 assert (키 불필요)
+npm run check:intent         # 직접 말하기 LLM 응답 검증(신뢰 경계) assert (키·네트워크 불필요)
 npm run check:api            # 전체 API 키 발급/연결 점검 (python, stdlib only)
 npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/*.json (관광공사분 수집 완료)
 ```
@@ -325,6 +334,20 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 
 선택 키: `KAKAO_REST_KEY`(지오코딩), `NEXT_PUBLIC_KAKAO_JS_KEY`(지도),
 `ANTHROPIC_API_KEY`(설명 문구). 셋 다 없어도 시연은 돕니다. 발급 절차는 `.env.example` 주석에.
+
+### check:api 403 실패 4건 — 전부 무시해도 됨 (2026-07-28 확인)
+
+`npm run check:api` 에서 403 이 나는 4건은 모두 **서비스 동작에 필요 없다.** 런타임이 실제로
+의존하는 API(단기예보·관광공사·버스·카카오 길찾기)는 전부 정상이다.
+
+| 403 항목 | 실사용 여부 | 판단 |
+|---|---|---|
+| 기상청 기상특보 | `weather.ts` 가 호출하지만 실패 전제 설계 (`warningsOk: false`) | 유일하게 승인되면 이득. 승인 전까지는 단기예보 풍속으로 부분 대체 |
+| 카카오 지오코딩 | 호출 코드 없음 | 원래 용도(비짓제주 좌표 보정)가 소멸 — 관광공사 API 가 mapx/mapy 를 직접 준다. 403 원인은 카카오 콘솔 "카카오맵" 사용 설정 미활성 (2026-07-28 응답 본문으로 확인: `disabled OPEN_MAP_AND_LOCAL service`). 지도를 넣을 거면 콘솔에서 켜야 한다 |
+| 공항 운항현황 | 호출 코드 없음 | 통계 데이터라 실시간 결항 감지 불가. 결항은 사용자 입력 처리 (기획 확정) |
+| 관광 방문자추이 (DataLab) | 호출 코드 없음 | 혼잡 보정용 2차 지표. data.go.kr 활용신청 안 된 서비스로 추정 |
+
+미사용 3건은 `apis.py` 의 `CHECKS` 에 확장 계획 근거로만 남아 있다. 심사용으로 안 쓸 거면 지워도 된다.
 
 - 스냅샷 JSON은 저장소에 커밋합니다. 수집 시각을 파일 안에 함께 기록하고 화면의
   '데이터 기준시각'에 그대로 씁니다 — 스냅샷이라고 숨기지 말고 기준시각을 표시하면 됩니다.
