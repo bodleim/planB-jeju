@@ -10,7 +10,7 @@
  * 여기서 추가로 보는 건 F1 이 모르는 두 가지 — 기상 위험과 끊긴 교통편이다.
  */
 import { getWeather, type Weather, type WeatherRisk } from '../data/weather.ts'
-import { SEONGSAN_PLACES, needsBoatFrom } from '../data/places.ts'
+import { JEJU_PLACES, needsBoatFrom } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { DEFAULT_POLICY, tryVisit, type VisitContext } from '../plan/generate.ts'
 import type { PlanPolicy, RejectReason as PlanRejectReason } from '../plan/types.ts'
@@ -212,7 +212,7 @@ export async function findCandidates(input: {
 }): Promise<FilterResult> {
   const clock = jejuClock()
   const weather = await getWeather(input.origin, Math.ceil(input.remainingMinutes / 60))
-  return filterCandidates(input.places ?? SEONGSAN_PLACES, {
+  return filterCandidates(input.places ?? JEJU_PLACES, {
     origin: input.origin,
     startMinutes: input.startMinutes ?? clock.minuteOfDay,
     weekday: input.weekday ?? clock.weekday,

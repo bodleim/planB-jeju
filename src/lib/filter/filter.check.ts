@@ -7,7 +7,7 @@
  */
 import assert from 'node:assert/strict'
 import type { Weather } from '../data/weather.ts'
-import { SEONGSAN_PLACES } from '../data/places.ts'
+import { JEJU_PLACES } from '../data/places.ts'
 import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { alwaysOpen, weeklyHours } from '../hours.ts'
 import { DEFAULT_POLICY, PLACEHOLDER_POLICY } from '../plan/index.ts'
@@ -146,11 +146,11 @@ assert.equal(reasonOf(far, { hasCar: false }), 'tooFar', '차 없이 대중교�
 // 스냅샷을 다시 받아도 깨지지 않을 성질만 본다 (개별 장소 id 는 check:plan 쪽에서도 안 박는다).
 // 실데이터에는 운영정보가 확인된 장소가 있으므로 여기서는 DEFAULT_POLICY 를 쓴다
 // (위 개별 제약 블록은 미확인 허용 동작을 보려고 PLACEHOLDER_POLICY 를 쓴다).
-const real = filterCandidates(SEONGSAN_PLACES, { ...base, policy: DEFAULT_POLICY })
+const real = filterCandidates(JEJU_PLACES, { ...base, policy: DEFAULT_POLICY })
 assert.ok(real.candidates.length > 0, '실데이터로 후보가 하나도 안 남았다')
 assert.equal(
   real.candidates.length + real.rejected.length,
-  SEONGSAN_PLACES.length,
+  JEJU_PLACES.length,
   '모든 장소가 통과 또는 제외로 분류된다',
 )
 assert.ok(

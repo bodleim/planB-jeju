@@ -9,7 +9,7 @@
  * 유지되는지를 함께 본다 — 대안이라는 이유로 문 닫은 곳이 들어오면 시연이 무너진다.
  */
 import assert from 'node:assert/strict'
-import { SEONGSAN_PLACES } from '../data/places.ts'
+import { JEJU_PLACES } from '../data/places.ts'
 import { EXPOSURE_RISKS, filterCandidates, type FilterContext } from '../filter/index.ts'
 import { DEFAULT_POLICY, buildPlan, isSingleCategory, reshuffle, setKey, swapSlot } from './index.ts'
 import { pinsFromQuery, pinsToQuery } from './replace.ts'
@@ -43,7 +43,7 @@ const ctx: FilterContext = {
   policy: DEFAULT_POLICY,
 }
 
-const filtered = filterCandidates(SEONGSAN_PLACES, ctx)
+const filtered = filterCandidates(JEJU_PLACES, ctx)
 assert.ok(filtered.candidates.length >= 10, `실데이터 후보가 ${filtered.candidates.length}곳뿐`)
 assert.ok(
   filtered.rejected.some((r) => r.reason === 'cancelled'),
@@ -177,7 +177,7 @@ for (let i = 0; i < 6; i += 1) {
 assert.ok(keys.size >= 3, `새로고침 6회에 조합이 ${keys.size}종뿐`)
 
 // 고정은 제약을 우회하지 못한다 — 갈 수 없는 곳을 고정해도 편성되지 않는다
-const unreachable = SEONGSAN_PLACES.find((p) => p.dependsOn === 'ferry')
+const unreachable = JEJU_PLACES.find((p) => p.dependsOn === 'ferry')
 assert.ok(unreachable, '우도 후보를 못 찾았다')
 const forced = buildPlan(input, filtered.candidates, DEFAULT_POLICY, [unreachable.id])
 assert.ok(

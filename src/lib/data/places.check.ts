@@ -6,7 +6,7 @@
  * 손으로 확인한 몇 건을 고정 assert 로 박아 둔다.
  */
 import assert from 'node:assert/strict'
-import { PLACES_SNAPSHOT, PLACE_LOAD, SEONGSAN_PLACES, parseFeeWon, parseSpendMinutes } from './places.ts'
+import { PLACES_SNAPSHOT, PLACE_LOAD, JEJU_PLACES, islandOf, parseFeeWon, parseSpendMinutes } from './places.ts'
 import { parseClosedDays, parseOpenHours } from './tour-hours.ts'
 import { formatHm } from '../time.ts'
 import type { Weekday } from '../types.ts'
@@ -94,7 +94,7 @@ assert.ok(
 )
 assert.deepEqual(PLACE_LOAD.unmappedCat3, [], `EXPOSURE_BY_CAT3 에 없는 코드: ${PLACE_LOAD.unmappedCat3}`)
 
-for (const place of SEONGSAN_PLACES) {
+for (const place of JEJU_PLACES) {
   assert.ok(place.name.length > 0 && place.id.startsWith('tour-'), `id/name: ${place.id}`)
   assert.ok(place.coord.lat > 33 && place.coord.lat < 34, `${place.name}: 위도 이상 ${place.coord.lat}`)
   assert.ok(place.coord.lng > 126 && place.coord.lng < 127.5, `${place.name}: 경도 이상 ${place.coord.lng}`)
@@ -112,25 +112,29 @@ for (const place of SEONGSAN_PLACES) {
   }
 }
 
-// 우도는 배로만 간다 — 결항 시나리오의 핵심이라 실데이터에서도 확인한다
-const udo = SEONGSAN_PLACES.filter((p) => p.dependsOn === 'ferry')
-assert.ok(udo.length >= 5, `우도 후보가 ${udo.length}곳뿐 — 결항 시연이 약해진다`)
-// 판정은 주소 문자열로 하고, 검증은 좌표로 한다 — 둘이 어긋나면 분류가 잘못된 것이다.
-// 우도 섬 전체가 들어가는 상자이고, 성산항(33.474/126.932)은 이 밖이다.
-for (const place of udo) {
-  const { lat, lng } = place.coord
+// 부속섬은 배로만 간다 — 결항 시나리오의 핵심이라 실데이터에서도 확인한다
+const ferry = JEJU_PLACES.filter((p) => p.dependsOn === 'ferry')
+assert.ok(ferry.length >= 5, `여객선 의존 후보가 ${ferry.length}곳뿐 — 결항 시연이 약해진다`)
+// 여객선 의존으로 분류된 곳은 반드시 부속섬 좌표 상자(islandOf) 안이어야 한다 —
+// 육지 명소가 섬으로 잘못 잡히면 결항 때 멀쩡한 후보가 사라진다.
+for (const place of ferry) {
   assert.ok(
-    lat > 33.485 && lat < 33.535 && lng > 126.935 && lng < 126.975,
-    `${place.name}: 여객선 의존으로 분류됐는데 좌표가 우도 밖이다 (${lat}, ${lng})`,
+    islandOf(place.coord) !== null,
+    `${place.name}: 여객선 의존으로 분류됐는데 좌표가 부속섬 밖이다 (${place.coord.lat}, ${place.coord.lng})`,
   )
 }
+// 결항 시연의 무대인 우도 후보가 실제로 있어야 한다
 assert.ok(
-  !SEONGSAN_PLACES.some((p) => p.dependsOn === 'ferry' && /성산일출봉|섭지코지|광치기/.test(p.name)),
+  ferry.some((p) => islandOf(p.coord) === '우도'),
+  '우도 후보가 없다 — 성산항 결항 시나리오가 성립하지 않는다',
+)
+assert.ok(
+  !JEJU_PLACES.some((p) => p.dependsOn === 'ferry' && /성산일출봉|섭지코지|광치기/.test(p.name)),
   '육지 명소가 여객선 의존으로 잘못 분류됐다',
 )
 
 // 노출도 — 기상 필터가 이 값에 통째로 걸려 있다
-const byName = (needle: string) => SEONGSAN_PLACES.find((p) => p.name.includes(needle))
+const byName = (needle: string) => JEJU_PLACES.find((p) => p.name.includes(needle))
 assert.equal(byName('광치기해변')?.exposure, 'coastal')
 assert.equal(byName('아쿠아플라넷')?.exposure, 'indoor')
 assert.equal(byName('성산항')?.exposure, 'coastal')
@@ -140,10 +144,10 @@ console.log(
   `TourAPI 로더 검증 ok — ${PLACES_SNAPSHOT.loaded}/${PLACES_SNAPSHOT.total}곳 적재` +
     ` (운영정보 확인 불가 ${PLACES_SNAPSHOT.skipped}곳 제외), 기준시각 ${PLACES_SNAPSHOT.fetchedAt}`,
 )
-const verified = SEONGSAN_PLACES.filter((p) => p.verified).length
-console.log(`  운영정보 확정 ${verified}곳 / 휴무일 미확인 ${PLACES_SNAPSHOT.loaded - verified}곳, 여객선 의존 ${udo.length}곳`)
+const verified = JEJU_PLACES.filter((p) => p.verified).length
+console.log(`  운영정보 확정 ${verified}곳 / 휴무일 미확인 ${PLACES_SNAPSHOT.loaded - verified}곳, 여객선 의존 ${ferry.length}곳`)
 const byExposure = new Map<string, number>()
-for (const p of SEONGSAN_PLACES) byExposure.set(p.exposure, (byExposure.get(p.exposure) ?? 0) + 1)
+for (const p of JEJU_PLACES) byExposure.set(p.exposure, (byExposure.get(p.exposure) ?? 0) + 1)
 console.log(`  노출도 ${[...byExposure].map(([k, v]) => `${k} ${v}`).join(' / ')}`)
 for (const skipped of PLACE_LOAD.unparsed) {
   console.log(`  제외  ${skipped.title.slice(0, 20).padEnd(22)} ${skipped.raw.replace(/\s+/g, ' ').slice(0, 60) || '(운영시간 없음)'}`)

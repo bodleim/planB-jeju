@@ -26,8 +26,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 |---|---|---|
 | 기상 데이터 | **단기예보만 완료** `src/lib/data/weather.ts` — 실시간 호출, 실패 시 `isFallback` 폴백. **기상특보는 403(응답 거부)** 이라 `warningsOk: false` 이고 판정에 안 들어갑니다 | `npm run check:weather` |
 | 이동시간 추정 | **완료** `src/lib/geo.ts` — 거리 기반. 제주 ITS 키 없어 정체 보정은 `congestion` 인자로 대기 | (필터 체크에 포함) |
-| 스냅샷 수집 | **완료** `scripts/apis.py`(`tour_nearby`·`tour_area`·`tour_intro`·`tour_items`) + `scripts/snapshot.py`. 기본은 `tour-seongsan`(성산항 반경 15km, 유형 5종, 1회 약 **135건**). 전역 `tour-jeju`(1,016곳, 재개 가능)는 **명시해야 돕니다** — 기본에서 뺀 이유는 상세 호출이 장소당 1회라 1,000건급이기 때문입니다 | `npm run check:api` (관광공사 2건 실키 OK) |
-| 후보 장소 | **완료 — 실데이터** `src/lib/data/places.ts` + `snapshots/tour-seongsan.json`. 관광공사 TourAPI **103곳 수집 → 81곳 적재 → 그중 `verified: true` 72곳**. 세 숫자가 다릅니다 (바로 아래 설명) | `npm run check:places` |
+| 스냅샷 수집 | **완료 — 제주 전역** `scripts/apis.py` + `scripts/snapshot.py`. **앱이 읽는 스냅샷은 `tour-jeju`**(areaCode 39 전체, 2026-07-29 수집). 상세 호출이 장소당 1회라 1,000건급이고 **재개 가능** — 상세 못 받은 77곳은 `python3 scripts/snapshot.py tour-jeju` 재실행으로 이어받는다. `tour-seongsan` 은 상세 캐시 시드로만 남아 있다 | `npm run check:api` (관광공사 2건 실키 OK) |
+| 후보 장소 | **완료 — 실데이터, 제주 전역** `src/lib/data/places.ts` + `snapshots/tour-jeju.json`. 관광공사 TourAPI **1,010곳 수집 → 795곳 적재 → 그중 `verified: true` 718곳**. 세 숫자가 다릅니다 (바로 아래 설명). 풀 이름은 `JEJU_PLACES` | `npm run check:places` |
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
 | F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
 | F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
@@ -40,12 +40,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | 숫자 | 뜻 |
 |---|---|
-| 103 | 관광공사에서 받은 원본 건수 (`snapshots/tour-seongsan.json`) |
-| 81 | 영업시간(`usetime`)을 확신 있게 읽어 `Place` 로 만든 곳 |
-| **72** | 휴무일(`restdate`)까지 읽어 `verified: true` 가 된 곳 = **`DEFAULT_POLICY` 에서 실제로 편성되는 곳** |
+| 1,010 | 관광공사에서 받은 원본 건수 (`snapshots/tour-jeju.json`, 제주 전역) |
+| 795 | 영업시간(`usetime`)을 확신 있게 읽고 좌표가 제주 안인 곳 = `Place` 로 만든 곳 |
+| **718** | 휴무일(`restdate`)까지 읽어 `verified: true` 가 된 곳 = **`DEFAULT_POLICY` 에서 실제로 편성되는 곳** |
 
-나머지 9곳(81 − 72)은 영업시간은 읽었지만 휴무일이 비어 있거나 '매월 첫째 화요일'처럼 주간
+나머지 77곳(795 − 718)은 영업시간은 읽었지만 휴무일이 비어 있거나 '매월 첫째 화요일'처럼 주간
 표에 담을 수 없어서 자동 편성에서 빠집니다. 화면의 '제외한 후보' 에 이유와 함께 나옵니다.
+적재에서 빠진 215곳은 대부분 운영시간 미확보(상세 미수집 77곳 포함)이고, 좌표가 제주 밖으로
+들어온 데이터 불량 1곳(영주산, 경도 12.8)도 로더가 걸러냅니다.
 
 `npm run dev` 후 아래 URL 을 열면 발표 흐름이 그대로 나옵니다. **한 줄입니다.**
 
@@ -54,10 +56,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 
 **위치는 브라우저 감지(`lat`/`lng`)나 장소 이름 검색(`from`, 스냅샷 안에서 찾음)으로 받습니다.**
-⚠️ **시연 임시 고정**: 둘 다 없으면 현재 위치를 **성산항으로 간주**합니다 (스냅샷 범위가
-성산권뿐이라 실제 위치로는 시연이 안 됨). 원래 원칙은 '둘 다 없으면 계획을 만들지 않고 위치를
-요청한다' — 임의의 지점으로 채우면 '지금 있는 곳 주변' 이라는 전제가 거짓이 되기 때문입니다.
-되돌리는 위치는 `page.tsx` origin 계산부의 `ponytail:` 주석에 있습니다.
+둘 다 없으면 **계획을 만들지 않고 위치를 요청합니다** — 임의의 지점으로 채우면 '지금 있는 곳
+주변' 이라는 전제가 거짓이 되기 때문입니다. (성산항 임시 고정은 스냅샷이 성산권뿐이던 시절의
+조치였고, 전역 확장과 함께 2026-07-29 해제했습니다.)
 
 **남은 일**
 1. **실제 브라우저 리허설** — 스와이프(포인터 이벤트)와 위치 권한 팝업은 HTTP 로 검증할 수
@@ -74,7 +75,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    명소라 발표에서 아쉬울 수 있습니다. 넣으려면 `places.ts` 의 `verified: closed !== null`
    한 줄을 고치면 되는데, 규칙을 굽히는 쪽이라 그대로 뒀습니다.
 
-스냅샷을 다시 받으려면 `npm run snapshot` (관광공사 개발계정 1,000건/일, 1회 약 135건).
+스냅샷을 다시 받으려면 `python3 scripts/snapshot.py tour-jeju` (관광공사 개발계정 1,000건/일,
+이미 받은 상세는 건너뛰므로 재실행 비용은 미확보분만큼이다).
 
 ### F3 → F1 파이프라인 (이 두 개가 어떻게 붙어 있는지)
 
@@ -122,7 +124,7 @@ src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이�
   (`remaining`/`checkin`은 계속 동작하는 레거시이고, 새 화면이 만드는 링크는 `end=15:00` 형태입니다.)
   `at`을 비우면 실제 현재 시각입니다 — 새벽에 열면 후보 0곳이 됩니다.
   위치는 `lat`/`lng`(브라우저 감지)가 있으면 그걸 쓰고, 없으면 `from`(장소 이름 검색)을
-  씁니다. 둘 다 없으면 **시연 임시 고정으로 성산항을 현재 위치로 간주**합니다 (위 ⚠️ 참고).
+  씁니다. **둘 다 없으면 계획을 만들지 않고 위치를 요청합니다.**
 - `pins`는 **장소 id**를 담습니다. '2번째 대안' 같은 인덱스로 저장하면 출발 시각이 바뀔 때
   링크가 가리키는 곳이 달라집니다.
 - 스와이프 순회 순서는 **점수 내림차순, 동점은 id**로 고정합니다. 채택안을 맨 앞에 두면
@@ -174,7 +176,7 @@ src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이�
 
 | 입력 | 설명 |
 |---|---|
-| 위치 | 브라우저 위치 감지(`lat`/`lng`) 또는 장소 이름 검색(`from` → `searchPlaces`). 둘 다 없으면 ⚠️ 시연 임시 고정으로 성산항을 씁니다 |
+| 위치 | 브라우저 위치 감지(`lat`/`lng`) 또는 장소 이름 검색(`from` → `searchPlaces`). 둘 다 없으면 계획을 만들지 않고 위치를 요청합니다 |
 | 시간 | 시작 시각과 남은 시간 (또는 종료 시각) |
 | 추천 카테고리 | **두 축**. 동반 유형(가족·커플·혼자) 하나 + 활동 성격(실내 위주·먹거리·액티비티) **하나 이상** — 활동은 중복 선택(OR)이고 `TripCategory.activity` 가 배열이다 |
 
@@ -186,8 +188,9 @@ src/app/{SwipeSlot,UseMyLocation}.tsx  클라이언트는 이 둘뿐 (스와이�
 기하평균이라 한 축만 뛰어난 곳이 양쪽 고른 곳보다 아래로 갑니다 — '가족 + 먹거리'는
 가족에게 맞으면서 먹거리이기도 해야 합니다.
 
-위치가 성산권에서 멀면 조용히 빈 결과를 주지 않고 `diagnostics.nearestCandidateKm`에
-거리를 남깁니다. 스냅샷 범위가 성산권뿐이라 생기는 한계를 화면이 설명할 수 있어야 합니다.
+위치에서 후보가 먼 경우 조용히 빈 결과를 주지 않고 `diagnostics.nearestCandidateKm`에
+거리를 남깁니다. 스냅샷이 제주 전역(2026-07-29~)이라 섬 안에서는 드물지만, 남은 시간이
+짧으면 여전히 발생할 수 있습니다.
 
 **완료 기준**: 시간과 카테고리만 넣으면 30초 이내에 계획이 뜨고, 모든 방문지가 도착
 시각에 실제로 열려 있으며, 남은 시간 안에 완주 가능하다.
@@ -282,7 +285,7 @@ npm run lint    # ESLint
 cp .env.example .env.local   # 키 채우기 (런타임에 필수인 건 DATA_GO_KR_KEY 하나)
 npm run check:weather        # 기상청 발표시각·파싱·위험판정 assert (키 불필요)
 npm run check:weather -- live # 실제 호출까지 (키 없으면 폴백 확인)
-npm run check:places         # TourAPI 운영시간·휴무 파서 + 스냅샷 103건 적재 assert (키 불필요)
+npm run check:places         # TourAPI 운영시간·휴무 파서 + 전역 스냅샷 적재 assert (키 불필요)
 npm run check:filter         # F3 제약 단위 assert + 실데이터 연결 확인 (키 불필요)
 npm run check:plan           # F1 계획 + F2 교체/재생성 + 발표 시나리오 재현 (키 불필요)
 npm run check:prompt         # 직접 말하기 폴백(키워드 표) — 예시 문장 매핑 assert (키 불필요)
@@ -326,8 +329,8 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
 대체했고 자동승인이라 즉시 발급됩니다. 엔드포인트는 `apis.data.go.kr/B551011/KorService2/` —
 장소 목록은 `areaBasedList2`(`areaCode=39`) 또는 `locationBasedList2`(성산항 좌표 반경),
 운영시간·쉬는날은 `detailIntro2`. **오퍼레이션 이름 끝에 `2`가 붙은 것만 쓰세요** —
-`KorService1`은 폐기됐고 블로그 예제 대부분이 구버전입니다. 개발계정 1,000건/일이라
-성산권 30곳(목록 1회 + 상세 30회)이면 충분합니다.
+`KorService1`은 폐기됐고 블로그 예제 대부분이 구버전입니다. 개발계정 1,000건/일 —
+전역(1,010곳)은 하루 예산에 거의 꽉 차므로 수집기가 재개 가능하게 되어 있습니다.
 
 **제주 ITS 실시간교통(15093660)도 못 받았습니다** (담당자 승인 1~3일). `estimateTravelMinutes`
 의 거리 기반 추정을 그대로 씁니다. 심사 질의에는 "신청 완료, 승인 대기"로 답합니다.
@@ -353,7 +356,8 @@ npm run snapshot             # 관광 후보·교통 → src/lib/data/snapshots/
   '데이터 기준시각'에 그대로 씁니다 — 스냅샷이라고 숨기지 말고 기준시각을 표시하면 됩니다.
 - 기상청 호출은 반드시 **실패해도 화면이 뜨도록** 감쌉니다. 실패 시 마지막 스냅샷으로
   폴백하고 '확인 필요'로 표시합니다. 시연 중 네트워크가 끊겨도 계획은 나와야 합니다.
-- 스냅샷 범위는 **성산권 우선**으로 좁힙니다. 제주 전역 데이터를 다 넣을 시간은 없습니다.
+- 스냅샷 범위는 **제주 전역**입니다 (2026-07-29 확장). 처음엔 성산권으로 좁혀 시작했고,
+  전역 수집기는 재개 가능하므로 상세 미확보분은 `npm run snapshot` 계열 재실행으로 채웁니다.
 
 ## 일정 생성 로직 (F1 구현 순서)
 

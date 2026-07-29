@@ -6,10 +6,10 @@
  * 시간대 바꾸기)도 쿼리 파라미터(`say`/`swap`)로 여닫는다 — 무대에서 JS 가 죽어도 화면은 뜬다.
  *
  * 출발 위치는 브라우저 위치 감지(lat/lng) 또는 장소 이름 검색(from)으로 받는다.
- * **시연 임시 고정**: 둘 다 없으면 성산항을 현재 위치로 간주한다 (origin 계산부의
- * ponytail 주석 참고). 원래 원칙은 '위치가 없으면 계획을 만들지 않는다' 이다.
+ * 둘 다 없으면 계획을 만들지 않고 위치를 요청한다 — 임의 지점으로 채우면
+ * '지금 있는 곳 주변' 이라는 전제가 거짓이 된다.
  */
-import { PLACES_SNAPSHOT, SEONGSAN_PLACES, searchPlaces } from '@/lib/data/places.ts'
+import { PLACES_SNAPSHOT, JEJU_PLACES, searchPlaces } from '@/lib/data/places.ts'
 import { analyzeIntent } from '@/lib/llm-intent.ts'
 import { SEONGSAN_PORT, getWeather, type Weather } from '@/lib/data/weather.ts'
 import { findCandidates, type Rejection } from '@/lib/filter/index.ts'
@@ -159,7 +159,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   let intentReply: string | null = null
   let promptFallback = false
   if (promptRaw) {
-    const intent = await analyzeIntent(promptRaw, SEONGSAN_PLACES)
+    const intent = await analyzeIntent(promptRaw, JEJU_PLACES)
     if (intent !== null) {
       intentAvoid = intent.avoidIds
       intentPrefer = intent.preferIds
@@ -254,11 +254,10 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   const detected =
     Number.isFinite(lat) && Number.isFinite(lng) && isInJeju({ lat, lng }) ? { lat, lng } : null
   const matches = detected === null && from !== '' ? searchPlaces(from) : []
-  // ponytail: 시연 고정 — 감지도 검색도 없으면 현재 위치를 성산항으로 간주한다. 스냅샷 범위가
-  //           성산권뿐이라 실제 위치로는 시연이 안 된다. 실제 위치 필수(위치 없으면 계획을 만들지
-  //           않음)로 되돌리려면 아래 두 fallback 을 null 로 바꾸면 된다.
-  const origin = detected ?? matches[0]?.coord ?? SEONGSAN_PORT
-  const originLabel = detected ? '현재 위치' : (matches[0]?.name ?? '성산읍')
+  // 위치가 없으면 계획을 만들지 않고 요청한다 — 임의 지점으로 채우면 '지금 있는 곳 주변'
+  // 이라는 전제가 거짓이 된다. (성산항 임시 고정은 전역 스냅샷 확장으로 해제, 2026-07-29)
+  const origin = detected ?? matches[0]?.coord ?? null
+  const originLabel = detected ? '현재 위치' : (matches[0]?.name ?? null)
 
   // 화면 상태 전부. 링크·폼은 이걸 복사해서 바꿀 것만 바꾼다.
   const state: Record<string, string> = {
@@ -443,7 +442,7 @@ function Home({
         <UseMyLocation
           base={href({ lat: null, lng: null, from: null, pins: null, confirm: null })}
           variant="inline"
-          label={`${originLabel ?? '성산읍'} · 현재위치`}
+          label={originLabel ? `${originLabel} · 현재위치` : '위치를 알려주세요 (눌러서 감지)'}
         />
 
         <div className="home-weather" aria-label={`${weatherLabel} ${tempLabel}, 바람 ${windLabel}`}>

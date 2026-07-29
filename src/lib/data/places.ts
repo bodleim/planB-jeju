@@ -17,7 +17,8 @@
  *   심사에서 근거를 물으면 "운영정보는 관광공사, 성향 가중치는 카테고리 기반 추정"
  *   으로 답한다.
  */
-import snapshot from './snapshots/tour-seongsan.json' with { type: 'json' }
+import snapshot from './snapshots/tour-jeju.json' with { type: 'json' }
+import { isInJeju } from '../geo.ts'
 import { applyClosedDays, parseClosedDays, parseOpenHours } from './tour-hours.ts'
 import type {
   ActivityStyle,
@@ -69,6 +70,57 @@ const EXPOSURE_BY_CAT3: Readonly<Record<string, Exposure>> = {
   A05020300: 'indoor', // 일식
   A05020400: 'indoor', // 중식·기타
   A05020900: 'indoor', // 카페
+
+  // ---- 제주 전역(tour-jeju) 확장에서 추가된 코드 (2026-07-29). 라벨은 관광공사 분류 기준
+  //      추정이고, 판정에 쓰이는 건 노출도뿐이다. 애매하면 야외로 둔다 (우천에 야외를
+  //      권하는 실수보다 실내 후보를 하나 잃는 쪽이 싸다).
+  A01010200: 'outdoor', // 도립공원
+  A01010600: 'outdoor', // 자연휴양림
+  A01010700: 'outdoor', // 수목원
+  A01010800: 'outdoor', // 폭포
+  A01010900: 'outdoor', // 계곡
+  A01011000: 'outdoor', // 약수터
+  A01011700: 'outdoor', // 호수
+  A01011800: 'outdoor', // 강
+  A01011900: 'covered', // 동굴 — 만장굴 등. 안은 비를 안 맞는다
+  A01020200: 'outdoor', // 기암괴석
+  A02010400: 'outdoor', // 고택
+  A02010600: 'outdoor', // 민속마을
+  A02010700: 'outdoor', // 유적지·사적지
+  A02010800: 'outdoor', // 사찰 (경내 이동이 야외)
+  A02010900: 'outdoor', // 종교성지
+  A02020400: 'indoor', // 찜질방·스파
+  A02030200: 'outdoor', // 전통체험
+  A02030400: 'outdoor', // 이색체험
+  A02030600: 'outdoor', // 이색거리
+  A02040400: 'outdoor', // 발전소 견학
+  A02040600: 'indoor', // 식음료 공장견학
+  A02040900: 'covered', // 산업관광 기타
+  A02050100: 'outdoor', // 다리·대교
+  A02050500: 'covered', // 터널
+  A02060200: 'indoor', // 기념관
+  A02060400: 'indoor', // 컨벤션센터
+  A02060700: 'indoor', // 문화원
+  A02060900: 'indoor', // 도서관
+  A03010200: 'outdoor', // 레포츠 일반
+  A03020200: 'outdoor', // 수련시설
+  A03020600: 'outdoor', // 카트 등 육상 레포츠
+  A03020700: 'outdoor', // 골프
+  A03021100: 'outdoor', // 육상 레포츠
+  A03021700: 'outdoor', // 자전거 하이킹
+  A03022100: 'outdoor', // 승마
+  A03022300: 'outdoor', // 육상 레포츠
+  // A0303xx 는 수상 레포츠 — 강풍·풍랑에 반드시 빠져야 하므로 전부 marine
+  A03030100: 'marine', // 윈드서핑·제트스키
+  A03030200: 'marine', // 카약·카누
+  A03030300: 'marine', // 요트
+  A03030600: 'marine', // 바다낚시
+  A03030700: 'marine', // 수영(해수)
+  A04010200: 'covered', // 상설시장
+  A04010400: 'indoor', // 면세점
+  A04010700: 'indoor', // 공예·공방
+  A04010900: 'covered', // 특산물 판매점
+  A05020700: 'indoor', // 이색음식점
 }
 
 /** cat3 에 없을 때 유형(contenttypeid)으로 떨어지는 기본값. 보수적으로 야외로 본다. */
@@ -259,7 +311,9 @@ export function loadPlaces(month = new Date(snapshot.fetchedAt).getMonth() + 1):
   for (const item of snapshot.data) {
     const lat = Number(item.mapy)
     const lng = Number(item.mapx)
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue
+    // 좌표가 없거나 제주 밖이면 뺀다 — 전역 스냅샷에 경도가 12.8 로 들어온 곳(영주산)이
+    // 실제로 있었다. 좌표가 틀리면 거리·이동시간이 전부 거짓이 되므로 후보로 못 쓴다.
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !isInJeju({ lat, lng })) continue
 
     const contentType = String(item.contenttypeid)
     const cat3 = item.cat3 ?? ''
@@ -310,7 +364,7 @@ export function loadPlaces(month = new Date(snapshot.fetchedAt).getMonth() + 1):
 const loaded = loadPlaces()
 
 /** F3 가 거를 후보 집합 — 성산·우도권. */
-export const SEONGSAN_PLACES: readonly Place[] = loaded.places
+export const JEJU_PLACES: readonly Place[] = loaded.places
 
 /**
  * 이름·권역으로 후보를 찾는다. **출발 위치 입력의 폴백**이다.
