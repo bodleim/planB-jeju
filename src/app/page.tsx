@@ -9,7 +9,7 @@
  * 둘 다 없으면 계획을 만들지 않고 위치를 요청한다 — 임의 지점으로 채우면
  * '지금 있는 곳 주변' 이라는 전제가 거짓이 된다.
  */
-import { PLACES_SNAPSHOT, JEJU_PLACES, searchPlaces } from '@/lib/data/places.ts'
+import { PLACES_SNAPSHOT, JEJU_PLACES, nearestAreaOf, searchPlaces } from '@/lib/data/places.ts'
 import { analyzeIntent } from '@/lib/llm-intent.ts'
 import { SEONGSAN_PORT, getWeather, type Weather } from '@/lib/data/weather.ts'
 import { findCandidates, type Rejection } from '@/lib/filter/index.ts'
@@ -249,15 +249,23 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
 
   // 출발 위치. 1) lat/lng 브라우저 감지  2) from 장소 이름 검색 (스냅샷 안에서 찾는다)
   const from = one(q, 'from')
-  const lat = Number(one(q, 'lat'))
-  const lng = Number(one(q, 'lng'))
+  const latRaw = one(q, 'lat')
+  const lngRaw = one(q, 'lng')
+  const lat = Number(latRaw)
+  const lng = Number(lngRaw)
   const detected =
-    Number.isFinite(lat) && Number.isFinite(lng) && isInJeju({ lat, lng }) ? { lat, lng } : null
+    latRaw !== '' && lngRaw !== '' && Number.isFinite(lat) && Number.isFinite(lng) && isInJeju({ lat, lng })
+      ? { lat, lng }
+      : null
   const matches = detected === null && from !== '' ? searchPlaces(from) : []
   // 위치가 없으면 계획을 만들지 않고 요청한다 — 임의 지점으로 채우면 '지금 있는 곳 주변'
   // 이라는 전제가 거짓이 된다. (성산항 임시 고정은 전역 스냅샷 확장으로 해제, 2026-07-29)
   const origin = detected ?? matches[0]?.coord ?? null
-  const originLabel = detected ? '현재 위치' : (matches[0]?.name ?? null)
+  // 감지 좌표는 가장 가까운 후보의 권역 이름으로 보여준다 ("성산읍") — 역지오코딩 호출 없이.
+  const originLabel = detected ? (nearestAreaOf(detected) ?? '현재 위치') : (matches[0]?.name ?? null)
+  // 좌표는 왔는데 제주 밖 — 조용히 무시하면 자동 감지가 성공하고도 아무 일도 없던 것처럼
+  // 보인다. 화면이 이유를 말해야 한다. (파라미터가 아예 없는 경우와 구분: Number('') 는 0 이다)
+  const outsideJeju = latRaw !== '' && lngRaw !== '' && detected === null
 
   // 화면 상태 전부. 링크·폼은 이걸 복사해서 바꿀 것만 바꾼다.
   const state: Record<string, string> = {
@@ -295,6 +303,11 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
       <Home
         weather={weather}
         originLabel={originLabel}
+        hasDetected={detected !== null}
+        outsideJeju={outsideJeju}
+        // 위치가 전혀 없을 때만 진입 즉시 자동 감지한다. 사용자가 장소를 검색했거나(from)
+        // 제주 밖으로 이미 판정났으면 다시 묻지 않는다 (무한 재감지 방지).
+        autoLocate={detected === null && from === '' && !outsideJeju}
         state={state}
         href={href}
         startMinutes={startMinutes}
@@ -393,6 +406,9 @@ function Splash() {
 function Home({
   weather,
   originLabel,
+  hasDetected,
+  outsideJeju,
+  autoLocate,
   state,
   href,
   startMinutes,
@@ -405,6 +421,9 @@ function Home({
 }: {
   weather: Weather
   originLabel: string | null
+  hasDetected: boolean
+  outsideJeju: boolean
+  autoLocate: boolean
   state: Record<string, string>
   href: (over: Record<string, string | number | null>) => string
   startMinutes: number
@@ -442,7 +461,16 @@ function Home({
         <UseMyLocation
           base={href({ lat: null, lng: null, from: null, pins: null, confirm: null })}
           variant="inline"
-          label={originLabel ? `${originLabel} · 현재위치` : '위치를 알려주세요 (눌러서 감지)'}
+          auto={autoLocate}
+          // 스플래시 재생 중 URL 이 바뀌면 (쿼리 추가) 스플래시가 끊긴다 — 끝난 뒤에 이동
+          delayMs={splash ? 5200 : 0}
+          label={
+            originLabel
+              ? `${originLabel} · ${hasDetected ? '현재위치' : '검색 위치'}`
+              : outsideJeju
+                ? '지금 위치가 제주 밖이에요 — 아래에서 장소를 검색하세요'
+                : '위치를 알려주세요 (눌러서 감지)'
+          }
         />
 
         <div className="home-weather" aria-label={`${weatherLabel} ${tempLabel}, 바람 ${windLabel}`}>

@@ -18,7 +18,7 @@
  *   으로 답한다.
  */
 import snapshot from './snapshots/tour-jeju.json' with { type: 'json' }
-import { isInJeju } from '../geo.ts'
+import { haversineKm, isInJeju } from '../geo.ts'
 import { applyClosedDays, parseClosedDays, parseOpenHours } from './tour-hours.ts'
 import type {
   ActivityStyle,
@@ -388,6 +388,24 @@ export function searchPlaces(query: string, limit = 8): Place[] {
   }
   scored.sort((a, b) => a.score - b.score)
   return scored.slice(0, limit).map((s) => s.place)
+}
+
+/**
+ * 좌표에서 가장 가까운 후보의 권역 이름 (성산읍·애월읍 …). 브라우저 위치 감지 결과를
+ * "현재 위치" 같은 동어반복 대신 사람이 읽는 지명으로 보여주기 위한 것이다.
+ * 역지오코딩 외부 호출을 쓰지 않는 이유는 장소 검색과 같다 — 이미 가진 데이터로 충분하다.
+ */
+export function nearestAreaOf(at: LatLng): string | null {
+  let best: Place | null = null
+  let bestKm = Infinity
+  for (const place of loaded.places) {
+    const km = haversineKm(at, place.coord)
+    if (km < bestKm) {
+      bestKm = km
+      best = place
+    }
+  }
+  return best ? best.area : null
 }
 
 export const PLACES_SNAPSHOT = {
