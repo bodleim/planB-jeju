@@ -107,6 +107,18 @@ const basePlan = plan(base)
 assertInvariants(basePlan, '기본')
 assert.ok(basePlan.slots.length >= 3, `시간대가 ${basePlan.slots.length}개뿐`)
 
+// '더 가까운 곳'은 단순 새로고침이 아니라 같은 조건에서 이동시간을 더 강하게 반영한다.
+const travelSeed = 2
+const normalTravelPlan = plan(buildPlan({ ...input, seed: travelSeed }, filtered.candidates, DEFAULT_POLICY))
+const prioritizedTravelPlan = plan(
+  buildPlan({ ...input, seed: travelSeed, prioritizeTravel: true }, filtered.candidates, DEFAULT_POLICY),
+)
+assertInvariants(prioritizedTravelPlan, '가까운 곳 우선')
+assert.ok(
+  prioritizedTravelPlan.totals.travelMinutes <= normalTravelPlan.totals.travelMinutes,
+  `'더 가까운 곳'인데 이동시간이 늘었다: ${normalTravelPlan.totals.travelMinutes}분 → ${prioritizedTravelPlan.totals.travelMinutes}분`,
+)
+
 // 완료 기준 1 — 각 시간대에 대안이 2개 이상
 for (const slot of basePlan.slots) {
   assert.ok(

@@ -105,7 +105,9 @@ export type FilterResult = {
 
 /** 기상 API 의 위험 + 중단 원인이 함의하는 위험. */
 export function activeRisks(weather: Weather, cause: Cause): WeatherRisk[] {
-  return [...new Set([...weather.risks, ...CAUSE_RISKS[cause]])]
+  // Page는 cause를 검증하지만, 이 순수 함수를 직접 호출하는 쪽이 잘못된 값을 넘겨도
+  // 결과 화면 전체가 죽지 않도록 방어한다.
+  return [...new Set([...weather.risks, ...(CAUSE_RISKS[cause] ?? [])])]
 }
 
 /**

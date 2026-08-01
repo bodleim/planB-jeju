@@ -20,7 +20,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### 구현 현황
 
-**2026-07-27 기준.** 이 표는 실제 파일 상태입니다 — 없는 걸 완료로 적지 마세요.
+**2026-08-01 기준.** 이 표는 실제 파일 상태입니다 — 없는 걸 완료로 적지 마세요.
 
 | | 상태 | 검증 |
 |---|---|---|
@@ -29,11 +29,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 스냅샷 수집 | **완료 — 제주 전역** `scripts/apis.py` + `scripts/snapshot.py`. **앱이 읽는 스냅샷은 `tour-jeju`**(areaCode 39 전체, 2026-07-29 수집). 상세 호출이 장소당 1회라 1,000건급이고 **재개 가능** — 상세 못 받은 77곳은 `python3 scripts/snapshot.py tour-jeju` 재실행으로 이어받는다. `tour-seongsan` 은 상세 캐시 시드로만 남아 있다 | `npm run check:api` (관광공사 2건 실키 OK) |
 | 후보 장소 | **완료 — 실데이터, 제주 전역** `src/lib/data/places.ts` + `snapshots/tour-jeju.json`. 관광공사 TourAPI **1,010곳 수집 → 795곳 적재 → 그중 `verified: true` 718곳**. 세 숫자가 다릅니다 (바로 아래 설명). 풀 이름은 `JEJU_PLACES` | `npm run check:places` |
 | F3 후보 필터 | **완료** `src/lib/filter/index.ts` — 하드 제약 5개(결항·환승·기상·거리·영업) + 진입점 `findCandidates()`. 결항은 사용자 입력 | `npm run check:filter` |
-| F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고 | `npm run check:plan` |
+| F1 계획 생성 | **완료** `src/lib/plan/generate.ts` — 위치·시간·카테고리 3입력, 시간대별 계획 + 대안 재고. **'더 가까운 곳' 요청은 이동시간 점수를 추가 반영**한다 | `npm run check:plan` |
 | F2 대안 교체 | **완료** `src/lib/plan/replace.ts` — 시간대별 교체·전체 재생성. 상태는 `pins` 하나 | `npm run check:plan` |
 | 시연 화면 | **완료 — Figma 시안(`public/figma/`) 기반 4화면** `src/app/page.tsx` — 홈 / 직접 말하기 시트(`say=1`) / 일정 결과 / 시간대 바꾸기 시트(`swap=N`). 전부 서버 렌더링 + GET 폼/링크이고 바텀시트도 쿼리로 여닫는다. 스와이프는 `SwipeSlot`. 결과 상단 지도는 **카카오맵**(`RouteMap.tsx`, `NEXT_PUBLIC_KAKAO_JS_KEY`) — 키가 없거나 SDK 로드 실패 시 SVG 개략도로 폴백. ⚠️ JS 키는 **[JavaScript SDK 도메인] 이 등록된 키**를 써야 한다 (2026-07-28 현재 'Default JS Key' `4ce867...` — '우리친해요' 키는 비활성화됨. 2026-07-21 콘솔 개편으로 플랫폼>Web 등록은 지도 SDK 에 안 쓰인다). 배포 시 같은 키의 [JavaScript SDK 도메인] 에 배포 도메인 추가 필요 | 지도 렌더는 headless Chrome 스크린샷으로 확인 (2026-07-28). **브라우저 스와이프·위치감지는 미확인** |
 | 직접 말하기 | **완료 — 2단.** ① `GEMINI_API_KEY` 가 있으면 `src/lib/llm-intent.ts` — gemini-2.5-flash + responseSchema(구조화 출력)로 원인·동반·활동·시간 추출 + **후보 목록에서 id 고르기**(좋아하는 것 `prefer`, 못 먹는 것 등 `avoid`). LLM 은 우리가 준 후보 id 만 답할 수 있고 목록 밖 id 는 `validateIntent` 가 버린다 — 사실 생성 통로 없음 (도메인 규칙 1). LLM 은 한 줄 응답(`reply`)도 돌려준다 — "승마장은 후보에 없어요" 처럼 요구가 후보와 안 맞을 때 조용히 실패하지 않기 위한 채널 (후보 목록 기반 사실만 말하게 프롬프트로 제한). ② 키 없음·쿼터 초과(429)·타임아웃(8초)·비정상 응답이면 `src/lib/prompt.ts` 키워드 표 폴백 + 화면에 "해석기가 응답하지 않아 기본 해석만 적용" 표시. 키는 aistudio.google.com/apikey 에서 무료 발급 (OpenAI 는 크레딧 문제로 Gemini 로 교체, 2026-07-28) 결과는 `avoid`/`prefer` 쿼리 파라미터로 유지 (LLM 호출은 문장 제출 때 1회). avoid 는 하드 제외 + '제외한 후보' 에 표시, prefer 는 **결정적 보너스(+0.35)** — 영업·기상·시간 제약을 통과하면 그 시간대를 차지한다. 제약 우회는 불가 (tryVisit 이 먼저 자름). 되묻는 대화 없음 — 문장 1회 → 즉시 결정 | `npm run check:intent` (응답 검증), `npm run check:prompt` (폴백). **LLM 실경로는 키 넣고 미검증** |
-| 위치 입력 | **완료** 첫 진입 시 **자동 감지**(`UseMyLocation auto` — 위치가 전혀 없을 때만, 스플래시 종료 후 시도) + 수동 버튼 + 장소 이름 검색(`searchPlaces`). 감지 좌표는 가장 가까운 후보의 권역 이름으로 표시(`nearestAreaOf`, 역지오코딩 호출 없음). **제주 밖 좌표는 무시하지 않고 "제주 밖" 안내**를 띄운다. 하드코딩 출발지 목록 없음 | 서버 4상태(감지·검색·제주밖·없음) HTTP 확인 + 자동 감지는 headless 로 확인. **실기기 권한 팝업은 미확인** |
+| 위치 입력 | **완료** 첫 진입 시 **자동 감지**(`UseMyLocation auto` — 위치가 전혀 없을 때만, 스플래시 종료 후 시도) + 수동 버튼 + 장소 이름 검색(`searchPlaces`). 감지 좌표는 가장 가까운 후보의 권역 이름으로 표시(`nearestAreaOf`, 역지오코딩 호출 없음). **제주 밖 좌표는 무시하지 않고 "제주 밖" 안내**를 띄운다. 하드코딩 출발지 목록 없음. 시작 시각을 비우면 **현재 제주 시각**부터 계획하고, 잘못된 `cause` 쿼리는 기본값으로 안전하게 처리한다 | `npm run check:filter` + `npm run build`. **실기기 권한 팝업은 미확인** |
 | 인원수·확정 | **완료** 인원수가 예상 지출에 반영되고, 확정하면 길찾기·전화 체크리스트를 준다 (예약은 하지 않는다) | HTTP 로 확인 |
 
 **후보 장소 숫자 세 개를 구분하세요.** 헷갈리면 "왜 후보가 이것밖에 없냐"는 질문에 답을 못 합니다.

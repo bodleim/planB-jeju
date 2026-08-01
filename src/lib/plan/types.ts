@@ -106,6 +106,8 @@ export interface PlanInput {
   readonly blockedTransport?: readonly TransportDependency[];
   /** 같은 seed면 같은 계획. F2의 새로고침은 이 값만 바꾼다. */
   readonly seed?: number;
+  /** '더 가까운 곳' 요청이면 이동시간 점수를 추가로 크게 반영한다. */
+  readonly prioritizeTravel?: boolean;
   /**
    * 사용자가 '직접 말하기'로 선호를 밝힌 장소 id. 점수 보너스로만 반영된다 —
    * 제약(영업·기상·시간)을 우회하지 못한다.

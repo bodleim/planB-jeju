@@ -12,7 +12,7 @@ import { estimateTravelMinutes, haversineKm, travelModeFor } from '../geo.ts'
 import { alwaysOpen, weeklyHours } from '../hours.ts'
 import { DEFAULT_POLICY, PLACEHOLDER_POLICY } from '../plan/index.ts'
 import { formatHm, jejuClock, parseHm } from '../time.ts'
-import type { Place } from '../types.ts'
+import type { Cause, Place } from '../types.ts'
 import {
   EXPOSURE_RISKS,
   activeRisks,
@@ -60,6 +60,11 @@ assert.equal(jejuClock(new Date('2026-07-27T01:30:00Z')).weekday, MONDAY, '2026-
 assert.deepEqual(activeRisks(weather([]), 'ferry_cancelled').sort(), ['sea', 'wind'], '기상 폴백이어도 원인만으로 위험 확정')
 assert.deepEqual(activeRisks(weather(['rain']), 'ferry_cancelled').sort(), ['rain', 'sea', 'wind'], '합집합')
 assert.deepEqual(activeRisks(weather(['rain']), 'closed'), ['rain'], '휴무 원인은 기상 위험을 더하지 않는다')
+assert.deepEqual(
+  activeRisks(weather(['rain']), 'unexpected-cause' as Cause),
+  ['rain'],
+  '잘못된 원인이 들어와도 결과 화면이 죽지 않고 기상 위험만 유지한다',
+)
 assert.deepEqual(EXPOSURE_RISKS.indoor, [], '실내는 기상 위험을 받지 않는다')
 assert.ok(EXPOSURE_RISKS.marine.includes('sea') && EXPOSURE_RISKS.coastal.includes('sea'))
 

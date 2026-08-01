@@ -28,6 +28,7 @@ import { formatDuration, formatHm, jejuClock, tryParseHm } from '@/lib/time.ts'
 import {
   ACTIVITY_STYLES,
   ACTIVITY_STYLE_LABELS,
+  CAUSES,
   COMPANION_LABELS,
   type ActivityStyle,
   type Cause,
@@ -120,6 +121,9 @@ const isCompanionUi = (value: string): value is CompanionUi =>
 const isActivityUi = (value: string): value is ActivityUi =>
   ACTIVITY_UI_OPTIONS.some(([key]) => key === value)
 
+const isCause = (value: string): value is Cause =>
+  (CAUSES as readonly string[]).includes(value)
+
 const companionDomainToUi = (value: CompanionType): CompanionUi =>
   value === 'solo' ? 'solo' : value === 'couple' ? 'couple' : 'child'
 
@@ -194,7 +198,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   const sortMode = one(q, 'sort') || 'recommended'
 
   const clock = jejuClock()
-  const cause = (parsed?.cause ?? (one(q, 'cause') || 'ferry_cancelled')) as Cause
+  const requestedCause = one(q, 'cause')
+  const cause = parsed?.cause ?? (isCause(requestedCause) ? requestedCause : 'ferry_cancelled')
   const legacyCompanion = (one(q, 'companion') || 'family') as CompanionType
   const requestedCompanionUi = one(q, 'companionUi')
   const companionUi: CompanionUi = isCompanionUi(requestedCompanionUi)
@@ -222,7 +227,8 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   const party = Math.min(12, Math.max(1, Number(one(q, 'party')) || 2))
   const hasCar = one(q, 'car') !== 'no'
   const atRaw = one(q, 'at')
-  const startMinutes = tryParseHm(atRaw) ?? 9 * 60
+  // 시작 시각을 비우면 서비스가 열린 현재 제주 시각부터 다시 짠다.
+  const startMinutes = tryParseHm(atRaw) ?? clock.minuteOfDay
 
   // 종료 시각. 새 화면은 `end` 를 쓰고, 리허설 URL 의 `remaining`/`checkin` 도 그대로 받는다.
   let endMinutes = tryParseHm(one(q, 'end'))
@@ -238,6 +244,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   endMinutes = startMinutes + remaining
 
   const seed = Number(one(q, 'seed')) || 1
+  const prioritizeTravel = one(q, 'near') === '1'
   const pins = pinsFromQuery(one(q, 'pins'))
 
   // 직접 말한 조건은 쿼리로 유지한다 — LLM 호출은 문장 제출 때 1회뿐이고,
@@ -284,6 +291,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
     ...(pins.length > 0 ? { pins: pinsToQuery(pins) } : {}),
     ...(avoid.length > 0 ? { avoid: avoid.join(',') } : {}),
     ...(prefer.length > 0 ? { prefer: prefer.join(',') } : {}),
+    ...(prioritizeTravel ? { near: '1' } : {}),
     ...(go ? { go: '1' } : {}),
     ...(confirmed ? { confirm: '1' } : {}),
   }
@@ -340,6 +348,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
       avoid={avoid}
       prefer={prefer}
       seed={seed}
+      prioritizeTravel={prioritizeTravel}
       confirmed={confirmed}
       swapRaw={swapRaw}
       qFilter={qFilter}
@@ -636,6 +645,7 @@ async function Result({
   avoid,
   prefer,
   seed,
+  prioritizeTravel,
   confirmed,
   swapRaw,
   qFilter,
@@ -664,6 +674,7 @@ async function Result({
   avoid: readonly string[]
   prefer: readonly string[]
   seed: number
+  prioritizeTravel: boolean
   confirmed: boolean
   swapRaw: string
   qFilter: string
@@ -721,6 +732,7 @@ async function Result({
       weekday,
       partySize: party,
       ...(prefer.length > 0 ? { preferredIds: prefer } : {}),
+      ...(prioritizeTravel ? { prioritizeTravel: true } : {}),
     },
     candidates,
     DEFAULT_POLICY,
@@ -819,7 +831,7 @@ async function Result({
         </ol>
 
         <div className="result-actions" aria-label="일정 빠르게 조정하기">
-          <a href={href({ seed: seed + 1, pins: null, swap: null })}>더 가까운 곳</a>
+          <a href={href({ near: '1', seed: seed + 1, pins: null, swap: null })}>더 가까운 곳</a>
           {/* 중복 선택이라 '추가' 는 기존 선택에 더한다. '실내만' 은 이름대로 단독 선택. */}
           <a
             href={href({

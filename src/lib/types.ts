@@ -122,3 +122,13 @@ export type Cause =
   | 'wind'
   | 'closed'
   | 'traffic';
+
+/** URL·폼 입력을 검증할 때 쓰는 허용 중단 원인 목록. */
+export const CAUSES: readonly Cause[] = [
+  'ferry_cancelled',
+  'flight_cancelled',
+  'rain',
+  'wind',
+  'closed',
+  'traffic',
+];

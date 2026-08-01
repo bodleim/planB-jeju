@@ -59,6 +59,8 @@ export interface ScoreContext {
    * 제약을 통과한 후보 사이의 순위만 끌어올린다 — 탈락 후보를 되살리지 못한다.
    */
   readonly preferredIds?: ReadonlySet<string>;
+  /** 가까운 곳을 우선할 때 이동시간 점수를 추가로 반영한다. */
+  readonly prioritizeTravel?: boolean;
 }
 
 export function scoreVisit(visit: FeasibleVisit, context: ScoreContext): ScoreBreakdown {
@@ -92,6 +94,9 @@ export function scoreVisit(visit: FeasibleVisit, context: ScoreContext): ScoreBr
   // '직접 말하기'는 추천 힌트가 아니라 사용자의 결정이다. 선호끼리는 여전히 기본 점수로 겨룬다.
   // 제약(영업·기상·남은시간)은 tryVisit 이 먼저 자르므로 이 보너스로는 못 되살린다.
   const preferred = context.preferredIds?.has(place.id) ? 0.35 : 0;
+  // 기본 점수에도 이동시간은 들어가지만(10%), '더 가까운 곳'은 사용자의 명시적 요청이므로
+  // 그 차이가 실제 후보 순위에 충분히 반영되도록 별도 보너스를 준다.
+  const travelPriority = context.prioritizeTravel ? 0.45 * travel : 0;
 
   const total =
     SCORE_WEIGHTS.feasibility * feasibility +
@@ -100,7 +105,8 @@ export function scoreVisit(visit: FeasibleVisit, context: ScoreContext): ScoreBr
     SCORE_WEIGHTS.cost * cost +
     SCORE_WEIGHTS.travel * travel +
     SCORE_WEIGHTS.diversity * diversity +
-    preferred;
+    preferred +
+    travelPriority;
 
   return { feasibility, timeEfficiency, categoryFit, cost, travel, diversity, total };
 }

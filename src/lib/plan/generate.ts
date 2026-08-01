@@ -230,6 +230,7 @@ export function generatePlan(
       travelCeiling,
       deadlineMinutes,
       ...(preferredIds !== undefined ? { preferredIds } : {}),
+      ...(input.prioritizeTravel ? { prioritizeTravel: true } : {}),
     };
 
     const scored: ScoredVisit[] = [];
