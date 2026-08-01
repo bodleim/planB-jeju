@@ -38,6 +38,7 @@ import {
   type Place,
 } from '@/lib/types.ts'
 import RouteMap from './RouteMap'
+import AppNavigation from './AppNavigation'
 import SwipeSlot from './SwipeSlot'
 import UseMyLocation from './UseMyLocation'
 
@@ -308,6 +309,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
   if (!go) {
     const weather = await getWeather(origin ?? SEONGSAN_PORT, 6)
     return (
+      <AppNavigation>
       <Home
         weather={weather}
         originLabel={originLabel}
@@ -327,10 +329,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
         // 스플래시는 쿼리 없는 첫 진입에만 — 링크 이동은 전부 파라미터를 달고 있어 재생되지 않는다
         splash={Object.keys(q).length === 0}
       />
+      </AppNavigation>
     )
   }
 
   return (
+    <AppNavigation>
     <Result
       origin={origin}
       originLabel={originLabel}
@@ -361,6 +365,7 @@ export default async function Page({ searchParams }: { searchParams: Promise<Que
       state={state}
       href={href}
     />
+    </AppNavigation>
   )
 }
 
